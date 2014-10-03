@@ -1,4 +1,8 @@
-# Yearofmoo AngularJS Seed Repo
+# MAM template in AngularJS
+
+This repo is provided as a sample for pulling data from the [Queensland Government open data portal][data] and presenting it in the MAM (Medium Awesome Map) page template.
+
+## Based on [Yearofmoo AngularJS Seed Repo][seed].
 
 A starter AngularJS repository for getting started with AngularJS. Includes helpful unit testing tools, Protractor integration and coverage testing.
 
@@ -37,3 +41,7 @@ A starter AngularJS repository for getting started with AngularJS. Includes help
 ### Coverage Testing
 
 `grunt coverage`
+
+
+[data]: https://data.qld.gov.au
+[seed]: https://github.com/yearofmoo/angularjs-seed-repo

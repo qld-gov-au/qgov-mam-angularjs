@@ -1,3 +1,5 @@
+[![devDependency Status](https://david-dm.org/qld-gov-au/qgov-mam-angularjs/dev-status.svg)](https://david-dm.org/qld-gov-au/qgov-mam-angularjs#info=devDependencies)
+
 # MAM template in AngularJS
 
 This repo is provided as a sample for pulling data from the [Queensland Government open data portal][data] and presenting it in the MAM (Medium Awesome Map) page template.

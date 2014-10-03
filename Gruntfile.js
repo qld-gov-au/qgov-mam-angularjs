@@ -107,7 +107,7 @@ module.exports = function(grunt) {
       },
       assets: {
         files: ['app/styles/**/*.css','app/scripts/**/*.js'],
-        tasks: ['concat']
+        tasks: ['jshint','concat']
       },
       protractor: {
         files: ['app/scripts/**/*.js','test/e2e/**/*.js'],
@@ -173,7 +173,7 @@ module.exports = function(grunt) {
   grunt.registerTask('default', ['dev']);
 
   //development
-  grunt.registerTask('dev', ['update', 'connect:devserver', 'open:devserver', 'watch:assets']);
+  grunt.registerTask('dev', ['update', 'jshint', 'connect:devserver', 'open:devserver', 'watch:assets']);
 
   //server daemon
   grunt.registerTask('serve', ['connect:webserver']);

@@ -1,4 +1,4 @@
-angular.module('myApp', ['ngRoute', 'app.homePages'])
+angular.module('qgovMam', ['ngRoute', 'app.homePages'])
 
   .constant('TPL_PATH', '/templates')
 

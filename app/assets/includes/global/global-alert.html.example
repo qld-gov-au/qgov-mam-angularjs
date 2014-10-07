@@ -1,0 +1,16 @@
+<!-- global alert -->
+<div class="global-alert">
+	<div class="header">
+		<h2><a href="https://www.qld.gov.au/qld-alert/">Emergency Alert</a></h2>
+		<time datetime="2011-01-11T10:45:00+10:00">about 3 minutes ago</time>
+	</div>
+
+	<div class="summary">
+		<p>
+			Flood warning from Banana Shire Council.
+			Imminent threat through a Grevillea Creek flood.
+			There is an immediate threat to life or property.
+			Leave the area now or go to higher ground.
+		<a href="https://www.qld.gov.au/qld-alert/">http://www.disaster.qld.gov.au</a></p>
+	</div>
+</div>

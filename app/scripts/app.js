@@ -5,6 +5,7 @@ angular.module('qgovMam', ['ngRoute', 'app.homePages'])
   .config(function($routeProvider, TPL_PATH) {
     $routeProvider.when('/',{
       controller : 'HomeCtrl',
+      controllerAs: 'vm',
       templateUrl : TPL_PATH + '/home.html'
     });
   });

@@ -2,10 +2,10 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-AU" lang="en-AU" data-ng-app="qgovMam">
 <head prefix="og: http://ogp.me/ns#">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-	<title>TITLE | FRANCHISE_NAME | Queensland Government</title>
+	<title>{{ vm.pageTitle }} | {{ vm.franchiseName }} | Queensland Government</title>
 
-<!--#set var="franchise" value="FRANCHISE_ID"-->
-<!--#set var="title" value="TITLE"-->
+<!--#set var="franchise" value="{{ vm.franchisePath }}"-->
+<!--#set var="title" value="{{ vm.pageTitle }}"-->
 
 <!--#include virtual="/assets/includes/global/head-assets-styles.html"-->
 <!-- PUT CUSTOM STYLES HERE -->
@@ -27,7 +27,7 @@
 	<meta name="DCTERMS.publisher" scheme="AGLSTERMS.AglsAgent" content="corporateName=The State of Queensland; jurisdiction=Queensland" />
 	<meta name="DCTERMS.created" content="YYYY-MM-DD" />
 	<meta name="DCTERMS.modified" content="YYYY-MM-DD" />
-	<meta name="DCTERMS.title" content="TITLE | FRANCHISE_NAME" />
+	<meta name="DCTERMS.title" content="{{ vm.pageTitle }} | {{ vm.franchiseName }}" />
 	<meta name="DCTERMS.alternative" content="ALTERNATIVE_TITLE" />
 	<meta name="DCTERMS.description" content="DESCRIPTION" />
 	<meta name="DCTERMS.subject" scheme="AGLSTERMS.APAIS" content="SUBJECT" />
@@ -51,9 +51,9 @@
 			<h2>You are here:</h2>
 			<ol>
 <!--#include virtual="/assets/includes/global/breadcrumb-citizen.html"-->
-				<li><a href="/FRANCHISE_URL/">FRANCHISE_NAME</a></li>
+				<li><a href="/{{ vm.franchisePath }}/">{{ vm.franchiseName }}</a></li>
 				<!-- PUT TOPIC/THEME BREADCRUMBS HERE -->
-				<li class="last-child">TITLE</li>
+				<li class="last-child">{{ vm.pageTitle }}</li>
 			</ol>
 		</div>
 
@@ -63,7 +63,7 @@
 
 <!--#include virtual="/assets/includes/global/global-alert.html"-->
 
-					<h1>TITLE</h1>
+					<h1>{{ vm.pageTitle }}</h1>
 
 <!--#include virtual="/assets/includes/global/page-options-pre.html"-->
 

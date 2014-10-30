@@ -22035,8 +22035,15 @@ var styleDirective = valueFn({
     };
   })
 
-  .controller('HomeCtrl', function($scope, welcomeMessage) {
-    $scope.welcome_message = welcomeMessage();
+  .controller('HomeCtrl', function() {
+    // $scope.welcome_message = welcomeMessage();
+
+    // view model
+    var vm = this;
+
+    vm.pageTitle = 'Hello world';
+    vm.franchiseName = 'Transport and motoring';
+    vm.franchisePath = 'transport';
   });
 ;angular.module('qgovMam', ['ngRoute', 'app.homePages'])
 
@@ -22045,6 +22052,7 @@ var styleDirective = valueFn({
   .config(function($routeProvider, TPL_PATH) {
     $routeProvider.when('/',{
       controller : 'HomeCtrl',
+      controllerAs: 'vm',
       templateUrl : TPL_PATH + '/home.html'
     });
   });

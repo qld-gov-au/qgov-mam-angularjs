@@ -123,9 +123,10 @@ module.exports = function(grunt) {
         },
         dest: './app/assets/app.js',
         src: [
-          'bower_components/angular/angular.js',
-          'bower_components/angular-route/angular-route.js',
-          'bower_components/angular-animate/angular-animate.js',
+          // 'bower_components/angular/angular.js',
+          // 'bower_components/angular-route/angular-route.js',
+          // 'bower_components/angular-animate/angular-animate.js',
+          'app/scripts/qgovTemplateControl.js',
           'app/scripts/homePages.js',
           'app/scripts/app.js',
           //place your JavaScript files here

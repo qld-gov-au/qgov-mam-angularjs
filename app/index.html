@@ -24,7 +24,6 @@
 	<meta name="DCTERMS.created" content="YYYY-MM-DD" />
 	<meta name="DCTERMS.modified" content="YYYY-MM-DD" />
 	<meta name="DCTERMS.title" content="{{ swe.pageTitle }} | {{ swe.franchiseName }}" />
-	<meta name="DCTERMS.alternative" content="ALTERNATIVE_TITLE" />
 	<meta name="DCTERMS.description" content="DESCRIPTION" />
 	<meta name="DCTERMS.subject" scheme="AGLSTERMS.APAIS" content="SUBJECT" />
 	<meta name="AGLSTERMS.function" scheme="AGLSTERMS.AGIFT" content="FUNCTION" />
@@ -34,8 +33,6 @@
 	<meta name="DCTERMS.audience" scheme="AGLSTERMS.agls-audience" content="AGLS_AUDIENCE" />
 	<meta name="DCTERMS.jurisdiction" scheme="AGLSTERMS.AglsJuri" content="Queensland" />
 	<meta name="DCTERMS.license" scheme="DCTERMS.URI" content="http://creativecommons.org/licenses/by/3.0/au/" />
-
-	<!-- PUT CUSTOM METADATA HERE -->
 </head>
 
 <body id="qld-gov-au" class="residents">
@@ -48,7 +45,6 @@
 			<ol>
 <!--#include virtual="/assets/includes/global/breadcrumb-citizen.html"-->
 				<li><a href="/{{ swe.franchisePath }}/">{{ swe.franchiseName }}</a></li>
-				<!-- PUT TOPIC/THEME BREADCRUMBS HERE -->
 				<li class="last-child">{{ swe.pageTitle }}</li>
 			</ol>
 		</div>
@@ -64,7 +60,6 @@
 <!--#include virtual="/assets/includes/global/page-options-pre.html"-->
 
 
-					<!-- PUT YOUR PAGE CONTENT HERE -->
 					<div data-ng-view></div>
 
 
@@ -73,9 +68,6 @@
 
 			<div id="asides"><div class="box-sizing"><div class="border">
 				<!--#include virtual="/assets/includes/global/global-aside.html"-->
-
-
-				<!-- PUT YOUR ASIDES HERE -->
 
 
 			</div></div></div><!-- end #asides, .box-sizing, .border -->
@@ -114,7 +106,6 @@
 
 <!--#include virtual="/assets/includes/global/footer-page.html"-->
 <script src="./assets/app.js"></script>
-<script src="//localhost:7777/livereload.js"></script>
 <!--#include virtual="/assets/includes/global/footer-stats.html"-->
 
 </body>

@@ -1,11 +1,8 @@
 angular.module('app.homePages', [])
 
-  .factory('welcomeMessage', function() {
-    return function() {
-      return 'Welcome Home...';
-    };
-  })
+  .controller('HomeCtrl', function() {
+    // view model
+    var vm = this;
 
-  .controller('HomeCtrl', function($scope, welcomeMessage) {
-    $scope.welcome_message = welcomeMessage();
+    vm.pageTitle = 'Hello home page';
   });

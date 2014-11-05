@@ -110,22 +110,23 @@ module.exports = function(grunt) {
     },
 
     concat: {
-      styles: {
-        dest: './app/assets/app.css',
-        src: [
-          'app/styles/app.css',
-          //place your Stylesheet files here
-        ]
-      },
+      // styles: {
+      //   dest: './app/assets/app.css',
+      //   src: [
+      //     'app/styles/app.css',
+      //     //place your Stylesheet files here
+      //   ]
+      // },
       scripts: {
         options: {
           separator: ';'
         },
         dest: './app/assets/app.js',
         src: [
-          'bower_components/angular/angular.js',
-          'bower_components/angular-route/angular-route.js',
-          'bower_components/angular-animate/angular-animate.js',
+          // 'bower_components/angular/angular.js',
+          // 'bower_components/angular-route/angular-route.js',
+          // 'bower_components/angular-animate/angular-animate.js',
+          'app/scripts/qgovTemplateControl.js',
           'app/scripts/homePages.js',
           'app/scripts/app.js',
           //place your JavaScript files here
@@ -138,7 +139,7 @@ module.exports = function(grunt) {
         livereload: 7777
       },
       assets: {
-        files: ['app/styles/**/*.css','app/scripts/**/*.js'],
+        files: ['app/scripts/**/*.js'],
         tasks: ['jshint','concat']
       },
       protractor: {

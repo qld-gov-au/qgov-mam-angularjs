@@ -1,18 +1,14 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-AU" lang="en-AU" data-ng-app="qgovMam">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-AU" lang="en-AU" data-ng-app="qgovMam" data-ng-controller="TemplateCtrl">
 <head prefix="og: http://ogp.me/ns#">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-	<title>TITLE | FRANCHISE_NAME | Queensland Government</title>
+	<title>{{ swe.pageTitle }} | {{ swe.franchiseName }} | Queensland Government</title>
 
 <!--#set var="franchise" value="FRANCHISE_ID"-->
 <!--#set var="title" value="TITLE"-->
 
 <!--#include virtual="/assets/includes/global/head-assets-styles.html"-->
-<!-- PUT CUSTOM STYLES HERE -->
-<link rel="stylesheet" type="text/css" href="./assets/app.css" />
-
 <!--#include virtual="/assets/includes/global/head-assets-scripts.html"-->
-<!-- PUT CUSTOM SCRIPTS THAT CANNOT BE DEFERRED HERE (see footer) -->
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular.min.js"></script>
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-animate.min.js"></script>
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-route.min.js"></script>
@@ -27,8 +23,7 @@
 	<meta name="DCTERMS.publisher" scheme="AGLSTERMS.AglsAgent" content="corporateName=The State of Queensland; jurisdiction=Queensland" />
 	<meta name="DCTERMS.created" content="YYYY-MM-DD" />
 	<meta name="DCTERMS.modified" content="YYYY-MM-DD" />
-	<meta name="DCTERMS.title" content="TITLE | FRANCHISE_NAME" />
-	<meta name="DCTERMS.alternative" content="ALTERNATIVE_TITLE" />
+	<meta name="DCTERMS.title" content="{{ swe.pageTitle }} | {{ swe.franchiseName }}" />
 	<meta name="DCTERMS.description" content="DESCRIPTION" />
 	<meta name="DCTERMS.subject" scheme="AGLSTERMS.APAIS" content="SUBJECT" />
 	<meta name="AGLSTERMS.function" scheme="AGLSTERMS.AGIFT" content="FUNCTION" />
@@ -38,8 +33,6 @@
 	<meta name="DCTERMS.audience" scheme="AGLSTERMS.agls-audience" content="AGLS_AUDIENCE" />
 	<meta name="DCTERMS.jurisdiction" scheme="AGLSTERMS.AglsJuri" content="Queensland" />
 	<meta name="DCTERMS.license" scheme="DCTERMS.URI" content="http://creativecommons.org/licenses/by/3.0/au/" />
-
-	<!-- PUT CUSTOM METADATA HERE -->
 </head>
 
 <body id="qld-gov-au" class="residents">
@@ -51,9 +44,8 @@
 			<h2>You are here:</h2>
 			<ol>
 <!--#include virtual="/assets/includes/global/breadcrumb-citizen.html"-->
-				<li><a href="/FRANCHISE_URL/">FRANCHISE_NAME</a></li>
-				<!-- PUT TOPIC/THEME BREADCRUMBS HERE -->
-				<li class="last-child">TITLE</li>
+				<li><a href="/{{ swe.franchisePath }}/">{{ swe.franchiseName }}</a></li>
+				<li class="last-child">{{ swe.pageTitle }}</li>
 			</ol>
 		</div>
 
@@ -63,12 +55,11 @@
 
 <!--#include virtual="/assets/includes/global/global-alert.html"-->
 
-					<h1>TITLE</h1>
+					<h1>{{ swe.pageTitle }}</h1>
 
 <!--#include virtual="/assets/includes/global/page-options-pre.html"-->
 
 
-					<!-- PUT YOUR PAGE CONTENT HERE -->
 					<div data-ng-view></div>
 
 
@@ -77,9 +68,6 @@
 
 			<div id="asides"><div class="box-sizing"><div class="border">
 				<!--#include virtual="/assets/includes/global/global-aside.html"-->
-
-
-				<!-- PUT YOUR ASIDES HERE -->
 
 
 			</div></div></div><!-- end #asides, .box-sizing, .border -->
@@ -118,7 +106,6 @@
 
 <!--#include virtual="/assets/includes/global/footer-page.html"-->
 <script src="./assets/app.js"></script>
-<script src="//localhost:7777/livereload.js"></script>
 <!--#include virtual="/assets/includes/global/footer-stats.html"-->
 
 </body>

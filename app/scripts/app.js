@@ -1,4 +1,4 @@
-angular.module('qgovMam', [ 'ngRoute', 'hc.marked', 'qgov', 'searchView' ])
+angular.module('qgovMam', [ 'ngRoute', 'qgov', 'leaflet-directive', 'hc.marked', 'searchView' ])
 // angular.module('qgovMam', [ 'ngRoute', 'qgov', 'searchView' ])
 
 .constant( 'TPL_PATH', '/templates' )

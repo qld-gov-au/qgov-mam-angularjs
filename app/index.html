@@ -8,6 +8,7 @@
 <!--#set var="title" value="TITLE"-->
 
 <!--#include virtual="/assets/includes/global/head-assets-styles.html"-->
+<link rel="stylesheet" href="//static.qgov.net.au/assets/v2/style/qgov-map.css" />
 <!--#include virtual="/assets/includes/global/head-assets-scripts.html"-->
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular.min.js"></script>
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-animate.min.js"></script>
@@ -60,6 +61,7 @@
 <!--#include virtual="/assets/includes/global/page-options-pre.html"-->
 
 
+					<leaflet id="map_canvas" style="height:270px"></leaflet>
 					<div data-ng-view autoscroll></div>
 
 

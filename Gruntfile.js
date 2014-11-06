@@ -127,7 +127,7 @@ module.exports = function(grunt) {
           // 'bower_components/angular-route/angular-route.js',
           // 'bower_components/angular-animate/angular-animate.js',
           'app/scripts/qgovTemplateController.js',
-          'app/scripts/homePages.js',
+          'app/scripts/searchController.js',
           'app/scripts/app.js',
           //place your JavaScript files here
         ]

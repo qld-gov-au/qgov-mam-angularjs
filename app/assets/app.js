@@ -10,6 +10,35 @@ angular.module( 'qgov', [] )
 
 	$scope.swe = swe;
 });
+;angular.module( 'map', [] )
+
+.controller( 'MapController', [
+function() {
+
+	// view model
+	var map = this;
+
+	// http://leaflet-extras.github.io/leaflet-providers/preview/
+	var Esri_NatGeoWorldMap = {
+		url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+		options: {
+			attribution: 'Tiles &copy; Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2013',
+		}
+	};
+
+	// map UI
+	// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/simple-map
+	map.config = { scrollWheelZoom: true };
+	map.tiles = Esri_NatGeoWorldMap;
+	map.center = {
+		lat: -23,
+		lng: 143,
+		zoom: 4
+	};
+
+	map.markers = {};
+
+}]);
 ;/*
  Leaflet, a JavaScript library for mobile-friendly interactive maps. http://leafletjs.com
  (c) 2010-2013, Vladimir Agafonkin
@@ -5148,7 +5177,7 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   pageN
 	}
 
 }]);
-;angular.module('qgovMam', [ 'ngRoute', 'qgov', 'leaflet-directive', 'hc.marked', 'searchView' ])
+;angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'leaflet-directive', 'map', 'hc.marked', 'searchView' ])
 // angular.module('qgovMam', [ 'ngRoute', 'qgov', 'searchView' ])
 
 .constant( 'TPL_PATH', '/templates' )

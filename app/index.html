@@ -61,7 +61,9 @@
 <!--#include virtual="/assets/includes/global/page-options-pre.html"-->
 
 
-					<leaflet id="map_canvas" style="height:270px"></leaflet>
+					<div data-ng-controller="MapController as map">
+						<leaflet id="map_canvas" style="height:270px" defaults="map.config" center="map.center" tiles="map.tiles" markers="map.markers"></leaflet>
+					</div>
 					<div data-ng-view autoscroll></div>
 
 

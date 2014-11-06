@@ -61,7 +61,10 @@
 
 <div id="app-viewport-tools-results">
 	<h2 class="resultset-title">
-		Displaying results <strong>1–10</strong> of <strong>{{ vm.searchResults.length }}</strong>
+		Displaying results
+		<strong>{{ vm.description.start }}–{{ vm.description.end }}</strong>
+		of <strong>{{ vm.description.total }}</strong>
+		<span ng-if="vm.description.keywords">for <strong>{{ vm.description.keywords }}</strong></span>
 	</h2>
 
 	<div class="status info">
@@ -83,5 +86,16 @@
 			<hr/>
 		</li>
 	</ol>
-	<div class="pagination"></div>
+
+	<!-- pagination -->
+	<div id="pagination">
+		<ul>
+			<li ng-if="vm.pagination.previous" class="previous"><a href="?page={{ vm.pagination.previous }}">Previous</a></li>
+			<li ng-repeat="page in vm.pagination.pages" ng-switch="page === vm.pagination.current">
+				<span ng-switch-when="true">{{ page }}</span>
+				<a ng-switch-default href="?page={{ page }}">{{ page }}</a>
+			</li>
+			<li ng-if="vm.pagination.next" class="next"><a href="?page={{ vm.pagination.next }}">Next</a></li>
+		</ul>
+	</div>
 </div>

@@ -4,6 +4,7 @@ angular.module('qgovMam', [ 'ngRoute', 'hc.marked', 'qgov', 'searchView' ])
 .constant( 'TPL_PATH', '/templates' )
 // search results
 .constant( 'RESULTS_PER_PAGE', 10 )
+.constant( 'PAGES_AVAILABLE', 10 )
 
 
 // markdown config

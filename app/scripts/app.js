@@ -7,6 +7,14 @@ angular.module('qgovMam', [ 'ngRoute', 'hc.marked', 'qgov', 'searchView' ])
 .constant( 'PAGES_AVAILABLE', 10 )
 
 
+// history and URL handling
+// https://code.angularjs.org/1.2.26/docs/guide/$location#-location-service-configuration
+.config([ '$locationProvider', 
+function(  $locationProvider ) {
+	$locationProvider.html5Mode( true );
+}])
+
+
 // markdown config
 .config([ 'markedProvider',
 function(  markedProvider ) {
@@ -20,7 +28,12 @@ function(  $routeProvider,   TPL_PATH ) {
 	.when( '/', {
 		controller: 'SearchController',
 		controllerAs: 'vm',
-		templateUrl : TPL_PATH + '/search.html'
+		templateUrl : TPL_PATH + '/search.html',
+		resolve: {
+			pageNumber: [ '$location', function( $location ) {
+				return parseInt( $location.search().page, 10 ) || 1;
+			}]
+		}
 	})
 	.otherwise({ redirectTo : '/' });
 }]);

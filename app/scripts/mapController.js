@@ -1,7 +1,40 @@
+/*global $*/
 angular.module( 'map', [] )
 
-.controller( 'MapController', [
-function() {
+
+.factory( 'mapModel', [ '$rootScope',
+function(                $rootScope ) {
+	var model = {
+		center: {
+			lat: -23,
+			lng: 143,
+			zoom: 4
+		},
+		markers: {}
+	};
+
+	return {
+		center: function() {
+			return model.center;
+		},
+		markers: function() {
+			return model.markers;
+		},
+		setMarkers: function( dataset ) {
+			// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/marker
+			model.markers = $.map( dataset, function( marker ) {
+				marker.focus = true;
+				marker.draggable = false;
+				return marker;
+			});
+			$rootScope.$broadcast( 'changeMapMarkers' );
+		}
+	};
+}])
+
+
+.controller( 'MapController', [ 'mapModel', '$scope',
+function(                        mapModel,   $scope ) {
 
 	// view model
 	var map = this;
@@ -18,12 +51,13 @@ function() {
 	// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/simple-map
 	map.config = { scrollWheelZoom: true };
 	map.tiles = Esri_NatGeoWorldMap;
-	map.center = {
-		lat: -23,
-		lng: 143,
-		zoom: 4
-	};
+	map.center = mapModel.center();
 
-	map.markers = {};
+	map.markers = mapModel.markers();
+
+	// update markers
+	$scope.$on( 'changeMapMarkers', function() {
+		map.markers = mapModel.markers();
+	});
 
 }]);

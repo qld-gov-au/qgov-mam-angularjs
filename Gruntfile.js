@@ -121,7 +121,7 @@ module.exports = function(grunt) {
         options: {
           separator: ';'
         },
-        dest: './app/assets/app.js',
+        dest: './app/assets/mam.js',
         src: [
           // 'bower_components/angular/angular.js',
           // 'bower_components/angular-route/angular-route.js',

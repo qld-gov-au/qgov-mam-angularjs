@@ -39,20 +39,36 @@ function(                        mapModel,   $scope ) {
 	// view model
 	var map = this;
 
-	// http://leaflet-extras.github.io/leaflet-providers/preview/
-	var Esri_NatGeoWorldMap = {
-		url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-		options: {
-			attribution: 'Tiles &copy; Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2013',
-		}
-	};
-
 	// map UI
 	// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/simple-map
 	map.config = { scrollWheelZoom: true };
-	map.tiles = Esri_NatGeoWorldMap;
-	map.center = mapModel.center();
 
+	// http://leaflet-extras.github.io/leaflet-providers/preview/
+	map.layers = {
+		baselayers: {
+			street: {
+				name: 'Street map',
+				url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+				type: 'xyz',
+				options: { attribution: 'Tiles &copy; Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2013' }
+			},
+			satellite: {
+				name: 'Satellite',
+				url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+				type: 'xyz',
+				options: { attribution: 'Esri, DigitalGlobe, GeoEye, i-cubed, USDA, USGS, AEX, Getmapping, Aerogrid, IGN, IGP, swisstopo, and the GIS User Community' }
+			}
+			// , {
+			// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+			// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
+			// }, {
+			// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+			// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
+			// }]
+		}
+	};
+
+	map.center = mapModel.center();
 	map.markers = mapModel.markers();
 
 	// update markers

@@ -1,14 +1,40 @@
-/*global $*/
+/*global $, L, qg*/
 angular.module( 'map', [] )
 
 
 .factory( 'mapModel', [ '$rootScope',
 function(                $rootScope ) {
+	// leaflet config
+	L.Icon.Default.imagePath = qg.swe.paths.assets + 'images/skin/map-marker';
+
 	var model = {
 		center: {
 			lat: -23,
 			lng: 143,
 			zoom: 4
+		},
+		layers: {
+			baselayers: {
+				street: {
+					name: 'Street map',
+					url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+					type: 'xyz',
+					options: { attribution: 'Tiles &copy; Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2013' }
+				},
+				satellite: {
+					name: 'Satellite',
+					url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+					type: 'xyz',
+					options: { attribution: 'Esri, DigitalGlobe, GeoEye, i-cubed, USDA, USGS, AEX, Getmapping, Aerogrid, IGN, IGP, swisstopo, and the GIS User Community' }
+				}
+				// , {
+				// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+				// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
+				// }, {
+				// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+				// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
+				// }]
+			}
 		},
 		markers: {}
 	};
@@ -16,6 +42,9 @@ function(                $rootScope ) {
 	return {
 		center: function() {
 			return model.center;
+		},
+		layers: function() {
+			return model.layers;
 		},
 		markers: function() {
 			return model.markers;
@@ -25,6 +54,7 @@ function(                $rootScope ) {
 			model.markers = $.map( dataset, function( marker ) {
 				marker.focus = true;
 				marker.draggable = false;
+				marker.group = 'cluster';
 				return marker;
 			});
 			$rootScope.$broadcast( 'changeMapMarkers' );
@@ -44,29 +74,7 @@ function(                        mapModel,   $scope ) {
 	map.config = { scrollWheelZoom: true };
 
 	// http://leaflet-extras.github.io/leaflet-providers/preview/
-	map.layers = {
-		baselayers: {
-			street: {
-				name: 'Street map',
-				url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-				type: 'xyz',
-				options: { attribution: 'Tiles &copy; Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2013' }
-			},
-			satellite: {
-				name: 'Satellite',
-				url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-				type: 'xyz',
-				options: { attribution: 'Esri, DigitalGlobe, GeoEye, i-cubed, USDA, USGS, AEX, Getmapping, Aerogrid, IGN, IGP, swisstopo, and the GIS User Community' }
-			}
-			// , {
-			// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-			// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
-			// }, {
-			// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-			// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
-			// }]
-		}
-	};
+	map.layers = mapModel.layers();
 
 	map.center = mapModel.center();
 	map.markers = mapModel.markers();

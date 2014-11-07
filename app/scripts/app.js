@@ -1,5 +1,4 @@
 angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'leaflet-directive', 'map', 'hc.marked', 'searchView' ])
-// angular.module('qgovMam', [ 'ngRoute', 'qgov', 'searchView' ])
 
 .constant( 'TPL_PATH', '/templates' )
 // search results

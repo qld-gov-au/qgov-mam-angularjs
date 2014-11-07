@@ -5197,7 +5197,12 @@ function(  $locationProvider ) {
 // markdown config
 .config([ 'markedProvider',
 function(  markedProvider ) {
-	markedProvider.setOptions({ gfm: true });
+	// https://github.com/chjj/marked#options-1
+	markedProvider.setOptions({
+		gfm: true,
+		tables: true,
+		sanitize: true, // no HTML
+	});
 }])
 
 

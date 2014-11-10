@@ -6,5 +6,11 @@
     "angular": "1.2.26",
     "angular-route": "1.2.26",
     "angular-animate": "1.2.26"
+  },
+  "dependencies": {
+    "angular-marked": "Hypercubed/angular-marked#~0.0.12",
+    "marked": "~0.3.2",
+    "angular-leaflet": "~0.7.9",
+    "leaflet.markercluster": "~0.4.0"
   }
 }

@@ -1,5 +1,5 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-AU" lang="en-AU" data-ng-app="qgovMam" data-ng-controller="TemplateCtrl">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-AU" lang="en-AU" data-ng-app="qgovMam" data-ng-controller="QgovTemplateController">
 <head prefix="og: http://ogp.me/ns#">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<title>{{ swe.pageTitle }} | {{ swe.franchiseName }} | Queensland Government</title>
@@ -8,6 +8,7 @@
 <!--#set var="title" value="TITLE"-->
 
 <!--#include virtual="/assets/includes/global/head-assets-styles.html"-->
+<link rel="stylesheet" href="//static.qgov.net.au/assets/v2/style/qgov-map.css" />
 <!--#include virtual="/assets/includes/global/head-assets-scripts.html"-->
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular.min.js"></script>
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-animate.min.js"></script>
@@ -60,7 +61,10 @@
 <!--#include virtual="/assets/includes/global/page-options-pre.html"-->
 
 
-					<div data-ng-view></div>
+					<div data-ng-controller="MapController as map">
+						<leaflet id="map_canvas" style="height:270px" defaults="map.config" center="map.center" layers="map.layers" markers="map.markers"></leaflet>
+					</div>
+					<div data-ng-view autoscroll></div>
 
 
 				</div></div></div><!-- end .article, .box-sizing, .border -->
@@ -105,7 +109,7 @@
 
 
 <!--#include virtual="/assets/includes/global/footer-page.html"-->
-<script src="./assets/app.js"></script>
+<script src="./assets/mam.js"></script>
 <!--#include virtual="/assets/includes/global/footer-stats.html"-->
 
 </body>

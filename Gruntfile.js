@@ -121,13 +121,19 @@ module.exports = function(grunt) {
         options: {
           separator: ';'
         },
-        dest: './app/assets/app.js',
+        dest: './app/assets/mam.js',
         src: [
           // 'bower_components/angular/angular.js',
           // 'bower_components/angular-route/angular-route.js',
           // 'bower_components/angular-animate/angular-animate.js',
-          'app/scripts/qgovTemplateControl.js',
-          'app/scripts/homePages.js',
+          'app/scripts/qgovTemplateController.js',
+          'app/scripts/mapController.js',
+          'bower_components/leaflet/dist/leaflet.js',
+          'bower_components/leaflet.markercluster/dist/leaflet.markercluster.js',
+          'bower_components/angular-leaflet/dist/angular-leaflet-directive.js',
+          'bower_components/marked/lib/marked.js',
+          'bower_components/angular-marked/angular-marked.js',
+          'app/scripts/searchController.js',
           'app/scripts/app.js',
           //place your JavaScript files here
         ]

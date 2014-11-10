@@ -134,6 +134,7 @@ module.exports = function(grunt) {
           'bower_components/marked/lib/marked.js',
           'bower_components/angular-marked/angular-marked.js',
           'app/scripts/searchController.js',
+          'app/scripts/detailController.js',
           'app/scripts/app.js',
           //place your JavaScript files here
         ]

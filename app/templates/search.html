@@ -73,7 +73,7 @@
 	<ol class="search-results">
 		<li ng-repeat="result in vm.searchResults | limitTo: 10">
 			<h3>
-				<a href="?title={{ result.Title }}">{{ result.Title }}</a>
+				<a href="#/{{ result.Title }}">{{ result.Title }}</a>
 			</h3>
 
 			<!-- only show this if present

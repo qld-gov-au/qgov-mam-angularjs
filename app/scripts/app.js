@@ -1,4 +1,4 @@
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'leaflet-directive', 'map', 'hc.marked', 'searchView' ])
+angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
 
 .constant( 'TPL_PATH', '/templates' )
 // search results
@@ -8,10 +8,10 @@ angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'leaflet-directive', 'map', 'hc.
 
 // history and URL handling
 // https://code.angularjs.org/1.2.26/docs/guide/$location#-location-service-configuration
-.config([ '$locationProvider', 
-function(  $locationProvider ) {
-	$locationProvider.html5Mode( true );
-}])
+// .config([ '$locationProvider', 
+// function(  $locationProvider ) {
+// 	$locationProvider.html5Mode( true );
+// }])
 
 
 // markdown config
@@ -29,15 +29,22 @@ function(  markedProvider ) {
 .config([ '$routeProvider', 'TPL_PATH',
 function(  $routeProvider,   TPL_PATH ) {
 	$routeProvider
+	// search results
 	.when( '/', {
 		controller: 'SearchController',
 		controllerAs: 'vm',
-		templateUrl : TPL_PATH + '/search.html',
+		templateUrl: TPL_PATH + '/search.html',
 		resolve: {
 			pageNumber: [ '$location', function( $location ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}]
 		}
+	})
+	// details view
+	.when( '/:title', {
+		controller: 'DetailController',
+		controllerAs: 'vm',
+		templateUrl: TPL_PATH + '/detail.html'
 	})
 	.otherwise({ redirectTo : '/' });
 }]);

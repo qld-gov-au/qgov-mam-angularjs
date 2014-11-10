@@ -5225,7 +5225,7 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 	var total = json.result.records.length;
 	var firstResultOnPage = ( pageNumber - 1 ) * RESULTS_PER_PAGE + 1;
 
-	vm.searchResults = json.result.records;
+	vm.searchResults = json.result.records.slice( firstResultOnPage - 1, firstResultOnPage + RESULTS_PER_PAGE );
 
 	mapModel.setMarkers(
 		$.map( json.result.records, function( record ) {

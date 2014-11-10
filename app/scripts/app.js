@@ -44,7 +44,12 @@ function(  $routeProvider,   TPL_PATH ) {
 	.when( '/:title', {
 		controller: 'DetailController',
 		controllerAs: 'vm',
-		templateUrl: TPL_PATH + '/detail.html'
+		templateUrl: TPL_PATH + '/detail.html',
+		resolve: {
+			title: [ '$route', function( $route ) {
+				return $route.current.params.title;
+			}]
+		}
 	})
 	.otherwise({ redirectTo : '/' });
 }]);

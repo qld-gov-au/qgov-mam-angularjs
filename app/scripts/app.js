@@ -6,14 +6,6 @@ angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'leaflet-directive', 'map', 'hc.
 .constant( 'PAGES_AVAILABLE', 10 )
 
 
-// history and URL handling
-// https://code.angularjs.org/1.2.26/docs/guide/$location#-location-service-configuration
-// .config([ '$locationProvider', 
-// function(  $locationProvider ) {
-// 	$locationProvider.html5Mode( true );
-// }])
-
-
 // markdown config
 .config([ 'markedProvider',
 function(  markedProvider ) {

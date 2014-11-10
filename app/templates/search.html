@@ -71,7 +71,7 @@
 		<p><strong>Note</strong>: Select a service centre to find its location, opening hours and the services it offers.</p>
 	</div>
 	<ol class="search-results">
-		<li ng-repeat="result in vm.searchResults | limitTo: 10">
+		<li ng-repeat="result in vm.searchResults | limitTo: vm.pagination.limit">
 			<h3>
 				<a ng-href="#/{{ result.Title }}">{{ result.Title }}</a>
 			</h3>

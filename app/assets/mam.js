@@ -5256,6 +5256,7 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 		current: pageNumber,
 		previous: pageNumber > 1 ? pageNumber - 1 : null,
 		next: pageNumber < lastPage ? pageNumber + 1 : null,
+		limit: RESULTS_PER_PAGE,
 		pages: []
 	};
 

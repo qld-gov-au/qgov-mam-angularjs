@@ -31,6 +31,13 @@ function(  $routeProvider,   TPL_PATH ) {
 	$routeProvider
 	// search results
 	.when( '/', {
+		// old MAM detail view URLs: ?title=<title>
+		redirectTo: function() {
+			// https://github.com/angular/angular.js/issues/7239
+			if ( /title=[^&]/.test( window.location.search )) {
+				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
+			}
+		},
 		controller: 'SearchController',
 		controllerAs: 'vm',
 		templateUrl: TPL_PATH + '/search.html',
@@ -42,6 +49,10 @@ function(  $routeProvider,   TPL_PATH ) {
 	})
 	// details view
 	.when( '/:title', {
+		// tidy up old MAM URLs
+		redirectTo: function() {
+			window.location.href = window.location.href.replace( /\?[^#]*/, '' );
+		},
 		controller: 'DetailController',
 		controllerAs: 'vm',
 		templateUrl: TPL_PATH + '/detail.html',

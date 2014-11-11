@@ -39,7 +39,8 @@ function(                $rootScope,   MAX_ZOOM ) {
 				// }]
 			}
 		},
-		markers: {}
+		markers: {},
+		paths: {}
 	};
 
 	return {
@@ -52,6 +53,9 @@ function(                $rootScope,   MAX_ZOOM ) {
 		markers: function() {
 			return model.markers;
 		},
+		paths: function() {
+			return model.paths;
+		},
 		setMarkers: function( dataset ) {
 			// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/marker
 			model.markers = $.map( dataset, function( marker ) {
@@ -61,12 +65,24 @@ function(                $rootScope,   MAX_ZOOM ) {
 				return marker;
 			});
 
-			// TODO if markers.length > 1, fit to bounds
 			if ( model.markers.length === 1 ) {
 				// only one marker, zoom in on it
 				model.center.lat = model.markers[ 0 ].lat;
 				model.center.lng = model.markers[ 0 ].lng;
 				model.center.zoom = MAX_ZOOM;
+
+				model.paths.target = {
+					type: 'circleMarker',
+					radius: 100,
+					latlngs: [ model.center.lat, model.center.lng ],
+					color: '#f00',
+					opacity: 0.8,
+					weight: 3,
+					fill: false,
+					clickable: false
+				};
+			} else {
+				model.paths = {};
 			}
 
 			$rootScope.$broadcast( 'changeMapMarkers' );
@@ -75,8 +91,8 @@ function(                $rootScope,   MAX_ZOOM ) {
 }])
 
 
-.controller( 'MapController', [ 'mapModel', '$scope',
-function(                        mapModel,   $scope ) {
+.controller( 'MapController', [ 'mapModel', '$scope', '$location',
+function(                        mapModel,   $scope,   $location ) {
 
 	// view model
 	var map = this;
@@ -88,12 +104,22 @@ function(                        mapModel,   $scope ) {
 	// http://leaflet-extras.github.io/leaflet-providers/preview/
 	map.layers = mapModel.layers();
 
-	map.center = mapModel.center();
-	map.markers = mapModel.markers();
-
-	// update markers
-	$scope.$on( 'changeMapMarkers', function() {
+	function updateMap() {
+		map.center = mapModel.center();
 		map.markers = mapModel.markers();
+		map.paths = mapModel.paths();
+	}
+
+	// when markers change
+	$scope.$on( 'changeMapMarkers', updateMap );
+
+	// onload
+	updateMap();
+
+	// marker click
+	$scope.$on( 'leafletDirectiveMarker.click', function( event, args ) {
+		var marker = map.markers[ args.markerName ];
+		$location.path( '/' + marker.title );
 	});
 
 }]);

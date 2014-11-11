@@ -88,13 +88,16 @@ function(                        mapModel,   $scope,   $location ) {
 	// http://leaflet-extras.github.io/leaflet-providers/preview/
 	map.layers = mapModel.layers();
 
-	map.center = mapModel.center();
-	map.markers = mapModel.markers();
-
-	// update markers
-	$scope.$on( 'changeMapMarkers', function() {
+	function updateMap() {
+		map.center = mapModel.center();
 		map.markers = mapModel.markers();
-	});
+	}
+
+	// when markers change
+	$scope.$on( 'changeMapMarkers', updateMap );
+
+	// onload
+	updateMap();
 
 	// marker click
 	$scope.$on( 'leafletDirectiveMarker.click', function( event, args ) {

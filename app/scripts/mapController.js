@@ -1,9 +1,12 @@
 /*global $, L, qg*/
 angular.module( 'map', [] )
 
+// map details
+.constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )
 
-.factory( 'mapModel', [ '$rootScope',
-function(                $rootScope ) {
+
+.factory( 'mapModel', [ '$rootScope', 'MAX_ZOOM',
+function(                $rootScope,   MAX_ZOOM ) {
 	// leaflet config
 	L.Icon.Default.imagePath = qg.swe.paths.assets + 'images/skin/map-marker';
 
@@ -57,6 +60,15 @@ function(                $rootScope ) {
 				marker.group = 'cluster';
 				return marker;
 			});
+
+			// TODO if markers.length > 1, fit to bounds
+			if ( model.markers.length === 1 ) {
+				// only one marker, zoom in on it
+				model.center.lat = model.markers[ 0 ].lat;
+				model.center.lng = model.markers[ 0 ].lng;
+				model.center.zoom = MAX_ZOOM;
+			}
+
 			$rootScope.$broadcast( 'changeMapMarkers' );
 		}
 	};

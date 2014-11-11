@@ -51,7 +51,8 @@ function(                $rootScope,   MAX_ZOOM ) {
 				// }]
 			}
 		},
-		markers: {}
+		markers: {},
+		paths: {}
 	};
 
 	return {
@@ -64,6 +65,9 @@ function(                $rootScope,   MAX_ZOOM ) {
 		markers: function() {
 			return model.markers;
 		},
+		paths: function() {
+			return model.paths;
+		},
 		setMarkers: function( dataset ) {
 			// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/marker
 			model.markers = $.map( dataset, function( marker ) {
@@ -73,12 +77,24 @@ function(                $rootScope,   MAX_ZOOM ) {
 				return marker;
 			});
 
-			// TODO if markers.length > 1, fit to bounds
 			if ( model.markers.length === 1 ) {
 				// only one marker, zoom in on it
 				model.center.lat = model.markers[ 0 ].lat;
 				model.center.lng = model.markers[ 0 ].lng;
 				model.center.zoom = MAX_ZOOM;
+
+				model.paths.target = {
+					type: 'circleMarker',
+					radius: 100,
+					latlngs: [ model.center.lat, model.center.lng ],
+					color: '#f00',
+					opacity: 0.8,
+					weight: 3,
+					fill: false,
+					clickable: false
+				};
+			} else {
+				model.paths = {};
 			}
 
 			$rootScope.$broadcast( 'changeMapMarkers' );
@@ -103,6 +119,7 @@ function(                        mapModel,   $scope,   $location ) {
 	function updateMap() {
 		map.center = mapModel.center();
 		map.markers = mapModel.markers();
+		map.paths = mapModel.paths();
 	}
 
 	// when markers change

@@ -75,8 +75,8 @@ function(                $rootScope,   MAX_ZOOM ) {
 }])
 
 
-.controller( 'MapController', [ 'mapModel', '$scope',
-function(                        mapModel,   $scope ) {
+.controller( 'MapController', [ 'mapModel', '$scope', '$location',
+function(                        mapModel,   $scope,   $location ) {
 
 	// view model
 	var map = this;
@@ -94,6 +94,12 @@ function(                        mapModel,   $scope ) {
 	// update markers
 	$scope.$on( 'changeMapMarkers', function() {
 		map.markers = mapModel.markers();
+	});
+
+	// marker click
+	$scope.$on( 'leafletDirectiveMarker.click', function( event, args ) {
+		var marker = map.markers[ args.markerName ];
+		$location.path( '/' + marker.title );
 	});
 
 }]);

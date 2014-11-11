@@ -1,4 +1,4 @@
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
+angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
 
 .constant( 'TPL_PATH', '/templates' )
 // search results
@@ -36,6 +36,9 @@ function(  $routeProvider,   TPL_PATH ) {
 		resolve: {
 			pageNumber: [ '$location', function( $location ) {
 				return parseInt( $location.search().page, 10 ) || 1;
+			}],
+			json: [ 'ckan', function( ckan ) {
+				return ckan.sqlRequest();
 			}]
 		}
 	})
@@ -51,6 +54,9 @@ function(  $routeProvider,   TPL_PATH ) {
 		resolve: {
 			title: [ '$route', function( $route ) {
 				return $route.current.params.title;
+			}],
+			json: [ 'ckan', function( ckan ) {
+				return ckan.sqlRequest();
 			}]
 		}
 	})

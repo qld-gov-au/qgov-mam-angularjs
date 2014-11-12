@@ -7,7 +7,7 @@ function(                           title,   mapModel,   json ) {
 	var vm = this;
 
 	var item = json.result.records.filter(function( item ) {
-		return title === item.Title;
+		return title === item.Title || title === item.Name;
 	});
 
 	if ( item.length > 0 ) {

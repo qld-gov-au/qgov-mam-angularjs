@@ -133,10 +133,10 @@ module.exports = function(grunt) {
           'bower_components/angular-leaflet/dist/angular-leaflet-directive.js',
           'bower_components/marked/lib/marked.js',
           'bower_components/angular-marked/angular-marked.js',
+          'app/scripts/ckan.js',
           'app/scripts/searchController.js',
           'app/scripts/detailController.js',
           'app/scripts/app.js',
-          //place your JavaScript files here
         ]
       },
     },

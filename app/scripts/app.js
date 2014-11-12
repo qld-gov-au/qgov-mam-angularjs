@@ -1,6 +1,7 @@
+/*global $*/
 angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
 
-.constant( 'TPL_PATH', '/templates' )
+.constant( 'TPL_PATH', './' )
 // search results
 .constant( 'RESULTS_PER_PAGE', 10 )
 .constant( 'PAGES_AVAILABLE', 10 )
@@ -61,4 +62,18 @@ function(  $routeProvider,   TPL_PATH ) {
 		}
 	})
 	.otherwise({ redirectTo : '/' });
+}])
+
+
+.run([ '$rootScope', function( $rootScope ) {
+	// $rootScope.$on( '$routeChangeStart', function() {
+	// 	$rootScope.isLoading = true;
+	// 	$rootScope.loadingPercent = 10;
+	// });
+	$rootScope.$on( '$routeChangeSuccess', function() {
+		// $rootScope.isLoading = false;
+		// $rootScope.loadingPercent = 100;
+		$( '#article' ).trigger( 'x-height-change' );
+	});
+
 }]);

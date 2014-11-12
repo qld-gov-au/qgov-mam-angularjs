@@ -5,13 +5,12 @@ angular.module( 'ckanApi', [] )
 .factory( 'sqlRequest', [ '$http', '$q',
 function(                  $http,   $q ) {
 
-	return function() {
+	return function( dataset ) {
 		var params = params || {};
 		var defer = $q.defer();
 
-		// hardcode user and format
 		angular.extend( params, {
-			sql: 'SELECT * FROM "ba4d6094-0c11-4dba-be3c-a08fe7d62f93" WHERE 1=1'
+			sql: 'SELECT * FROM "' + dataset + '" WHERE 1=1'
 		});
 
 		$http.get( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
@@ -20,6 +19,9 @@ function(                  $http,   $q ) {
 		})
 		.success(function( data ) {
 			defer.resolve( data );
+		})
+		.error(function( data, status ) {
+			defer.reject( status );
 		});
 
 		return defer.promise;

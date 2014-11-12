@@ -5243,13 +5243,12 @@ if (typeof exports === 'object') {
 .factory( 'sqlRequest', [ '$http', '$q',
 function(                  $http,   $q ) {
 
-	return function() {
+	return function( dataset ) {
 		var params = params || {};
 		var defer = $q.defer();
 
-		// hardcode user and format
 		angular.extend( params, {
-			sql: 'SELECT * FROM "ba4d6094-0c11-4dba-be3c-a08fe7d62f93" WHERE 1=1'
+			sql: 'SELECT * FROM "' + dataset + '" WHERE 1=1'
 		});
 
 		$http.get( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
@@ -5258,6 +5257,9 @@ function(                  $http,   $q ) {
 		})
 		.success(function( data ) {
 			defer.resolve( data );
+		})
+		.error(function( data, status ) {
+			defer.reject( status );
 		});
 
 		return defer.promise;
@@ -5334,7 +5336,7 @@ function(                           title,   mapModel,   json ) {
 	var vm = this;
 
 	var item = json.result.records.filter(function( item ) {
-		return title === item.Title;
+		return title === item.Title || title === item.Name;
 	});
 
 	if ( item.length > 0 ) {
@@ -5350,12 +5352,24 @@ function(                           title,   mapModel,   json ) {
 	}]);
 
 }]);
-;angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
+;/*global $*/
+angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
 
-.constant( 'TPL_PATH', '/templates' )
 // search results
 .constant( 'RESULTS_PER_PAGE', 10 )
 .constant( 'PAGES_AVAILABLE', 10 )
+
+// CKAN URI format
+// example: https://data.qld.gov.au/dataset/science-capability-directory/resource/8b9178e0-2995-42ad-8e55-37c15b4435a3
+.constant( 'SOURCE', (function() {
+	var sourceUri = $( 'meta[name="DCTERMS.source"]' ).attr( 'content' );
+	var source = sourceUri.split( /\/+/ );
+	return {
+		dataset: source[ source.length - 1],
+		server: source[ 1 ],
+		uri: sourceUri
+	};
+}()))
 
 
 // markdown config
@@ -5370,9 +5384,16 @@ function(  markedProvider ) {
 }])
 
 
-.config([ '$routeProvider', 'TPL_PATH',
-function(  $routeProvider,   TPL_PATH ) {
+// routing
+.config([ '$routeProvider', 'SOURCE',
+function(  $routeProvider,   SOURCE ) {
 	$routeProvider
+
+	// route error
+	.when( '/error', {
+		templateUrl: 'error.html'
+	})
+
 	// search results
 	.when( '/', {
 		// old MAM detail view URLs: ?title=<title>
@@ -5384,16 +5405,17 @@ function(  $routeProvider,   TPL_PATH ) {
 		},
 		controller: 'SearchController',
 		controllerAs: 'vm',
-		templateUrl: TPL_PATH + '/search.html',
+		templateUrl: 'search.html',
 		resolve: {
 			pageNumber: [ '$location', function( $location ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest();
+				return ckan.sqlRequest( SOURCE.dataset );
 			}]
 		}
 	})
+
 	// details view
 	.when( '/:title', {
 		// tidy up old MAM URLs
@@ -5402,15 +5424,34 @@ function(  $routeProvider,   TPL_PATH ) {
 		},
 		controller: 'DetailController',
 		controllerAs: 'vm',
-		templateUrl: TPL_PATH + '/detail.html',
+		templateUrl: 'detail.html',
 		resolve: {
 			title: [ '$route', function( $route ) {
 				return $route.current.params.title;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest();
+				return ckan.sqlRequest( SOURCE.dataset );
 			}]
 		}
 	})
 	.otherwise({ redirectTo : '/' });
+}])
+
+
+.run([   '$rootScope', '$location',
+function( $rootScope,   $location ) {
+	// $rootScope.$on( '$routeChangeStart', function() {
+	// 	$rootScope.isLoading = true;
+	// 	$rootScope.loadingPercent = 10;
+	// });
+
+	$rootScope.$on( '$routeChangeSuccess', function() {
+		// $rootScope.isLoading = false;
+		// $rootScope.loadingPercent = 100;
+		$( '#article' ).trigger( 'x-height-change' );
+	});
+
+	$rootScope.$on( '$routeChangeError', function() {
+		$location.path( '/error' );
+	});
 }]);

@@ -2,10 +2,10 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-AU" lang="en-AU" data-ng-app="qgovMam" data-ng-controller="QgovTemplateController">
 <head prefix="og: http://ogp.me/ns#">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-	<title>MAM demo | QGov template | Queensland Government</title>
+	<title>{{ swe.pageTitle }} | {{ swe.franchiseName }} | Queensland Government</title>
 
-<!--#set var="franchise" value=""-->
-<!--#set var="title" value="MAM demo"-->
+<!--#set var="franchise" value="FRANCHISE_ID"-->
+<!--#set var="title" value="TITLE"-->
 
 <!--#include virtual="/assets/includes/global/head-assets-styles.html"-->
 <link rel="stylesheet" href="//static.qgov.net.au/assets/v2/style/qgov-map.css" />
@@ -24,7 +24,7 @@
 	<meta name="DCTERMS.publisher" scheme="AGLSTERMS.AglsAgent" content="corporateName=The State of Queensland; jurisdiction=Queensland" />
 	<meta name="DCTERMS.created" content="YYYY-MM-DD" />
 	<meta name="DCTERMS.modified" content="YYYY-MM-DD" />
-	<meta name="DCTERMS.title" content="MAM demo | QGov template" />
+	<meta name="DCTERMS.title" content="{{ swe.pageTitle }} | {{ swe.franchiseName }}" />
 	<meta name="DCTERMS.description" content="DESCRIPTION" />
 	<meta name="DCTERMS.subject" scheme="AGLSTERMS.APAIS" content="SUBJECT" />
 	<meta name="AGLSTERMS.function" scheme="AGLSTERMS.AGIFT" content="FUNCTION" />
@@ -34,6 +34,7 @@
 	<meta name="DCTERMS.audience" scheme="AGLSTERMS.agls-audience" content="AGLS_AUDIENCE" />
 	<meta name="DCTERMS.jurisdiction" scheme="AGLSTERMS.AglsJuri" content="Queensland" />
 	<meta name="DCTERMS.license" scheme="DCTERMS.URI" content="http://creativecommons.org/licenses/by/3.0/au/" />
+	<meta name="DCTERMS.source" scheme="DCTERMS.URI" content="https://data.qld.gov.au/dataset/prison-locations/resource/27bdf47c-6bc8-4b1c-848b-4bcb88de6cb2" />
 </head>
 
 <body id="qld-gov-au" class="residents">
@@ -45,8 +46,8 @@
 			<h2>You are here:</h2>
 			<ol>
 <!--#include virtual="/assets/includes/global/breadcrumb-citizen.html"-->
-				<li><a href="/{{ swe.franchisePath }}/">QGov template</a></li>
-				<li class="last-child">MAM demo</li>
+				<li><a href="/{{ swe.franchisePath }}/">{{ swe.franchiseName }}</a></li>
+				<li class="last-child">{{ swe.pageTitle }}</li>
 			</ol>
 		</div>
 
@@ -56,16 +57,16 @@
 
 <!--#include virtual="/assets/includes/global/global-alert.html"-->
 
-					<h1>MAM demo</h1>
+					<h1>{{ swe.pageTitle }}</h1>
 
 <!--#include virtual="/assets/includes/global/page-options-pre.html"-->
 
-					<ul>
-						<li><a href="demo/transport/">Transport customer service centres</a></li>
-						<li><a href="demo/science/">Science Capability Directory</a></li>
-						<li><a href="demo/playgrounds/">All Abilities Playgrounds</a></li>
-						<li><a href="demo/prison/">Prison locations</a></li>
-					</ul>
+
+					<div data-ng-controller="MapController as map">
+						<leaflet id="map_canvas" style="height:270px" defaults="map.config" center="map.center" layers="map.layers" markers="map.markers" paths="map.paths"></leaflet>
+					</div>
+					<div data-ng-view data-autoscroll></div>
+
 
 				</div></div></div><!-- end .article, .box-sizing, .border -->
 			</div><!-- end #content -->

@@ -1,0 +1,48 @@
+<div id="view">
+	<div id="app-viewport-info">
+		<h2>{{ vm.item.Name }}</h2>
+		<div id="details" class="section">
+			<p marked="vm.item[ 'Location Description' ]"></p>
+			<h3>Details</h3>
+			<div class="inner">
+				<p><strong>Security level:</strong></p>
+				<p>{{ vm.item[ 'Security / Centre type' ] }}</p>
+				<dl class="grid">
+					<dt>Street address:</dt>
+					<dd marked="vm.item.Address"></dd>
+					<dt>Postal address:</dt>
+					<dd marked="vm.item[ 'Postal address' ]"></dd>
+					<dt>General phone:</dt>
+					<dd marked="vm.item[ 'General phone' ]"></dd>
+				</dl>
+			</div>
+		</div>
+		<div id="visiting" class="section">
+			<h3>Visiting</h3>
+			<div class="inner">
+				<p marked="vm.item.Visiting"></p>
+				<h3>Arrival times:</h3>
+				<p marked="vm.item[ 'Booking arrival times' ]"></p>
+			</div>
+		</div>
+		<div id="booking" class="section">
+			<h3>Bookings</h3>
+			<div class="inner">
+				<dl class="grid">
+					<dt>Booking phone:</dt>
+					<dd marked="vm.item[ 'Booking phone' ]"></dd>
+					<dt>Booking times:</dt>
+					<dd marked="vm.item[ 'Booking times' ]"></dd>
+				</dl>
+				<h3>Transport</h3>
+				<div class="inner">
+					<p marked="vm.item.Transport"></p>
+					<h2>More information</h2>
+					<div class="inner">
+						<p marked="vm.item[ 'Additional Information' ]"></p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>

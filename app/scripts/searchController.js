@@ -1,5 +1,32 @@
 /*global $*/
-angular.module( 'mam.searchView', [] )
+angular.module( 'mam.searchView', [ 'ngRoute', 'qgovMam.config' ])
+
+
+.config([ '$routeProvider', 'SOURCE',
+function(  $routeProvider,   SOURCE ) {
+// search results
+	$routeProvider.when( '/', {
+		// old MAM detail view URLs: ?title=<title>
+		redirectTo: function() {
+			// https://github.com/angular/angular.js/issues/7239
+			if ( /title=[^&]/.test( window.location.search )) {
+				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
+			}
+		},
+		controller: 'SearchController',
+		controllerAs: 'vm',
+		templateUrl: 'search.html',
+		resolve: {
+			pageNumber: [ '$location', function( $location ) {
+				return parseInt( $location.search().page, 10 ) || 1;
+			}],
+			json: [ 'ckan', function( ckan ) {
+				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
+			}]
+		}
+	});
+}])
+
 
 .controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'mapModel', 'pageNumber', 'json',
 function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapModel,   pageNumber,   json ) {

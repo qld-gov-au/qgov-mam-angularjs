@@ -5304,7 +5304,16 @@ function(            sqlRequest ) {
 		'sqlRequest': sqlRequest
 	});
 }])
-;;/*global $*/
+;;angular.module( 'mam.errorView', [ 'ngRoute' ])
+
+
+.config([ '$routeProvider',
+function(  $routeProvider ) {
+	$routeProvider.when( '/error', {
+		templateUrl: 'error.html'
+	});
+}]);
+;/*global $*/
 angular.module( 'mam.searchView', [ 'ngRoute', 'qgovMam.config' ])
 
 
@@ -5451,7 +5460,7 @@ angular.module( 'qgovMam.config', [] )
 	};
 }()));
 ;/*global $*/
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
+angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.errorView', 'mam.searchView', 'mam.detailView' ])
 
 // markdown config
 .config([ 'markedProvider',
@@ -5470,9 +5479,6 @@ function(  markedProvider ) {
 function(  $routeProvider ) {
 	// default routes
 	$routeProvider
-	.when( '/error', {
-		templateUrl: 'error.html'
-	})
 	.otherwise({ redirectTo : '/' });
 }])
 

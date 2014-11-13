@@ -134,6 +134,7 @@ module.exports = function(grunt) {
           'bower_components/marked/lib/marked.js',
           'bower_components/angular-marked/angular-marked.js',
           'app/scripts/ckan.js',
+          'app/scripts/errorController.js',
           'app/scripts/searchController.js',
           'app/scripts/detailController.js',
           'app/scripts/config.js',

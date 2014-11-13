@@ -1,5 +1,5 @@
 /*global $*/
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
+angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.errorView', 'mam.searchView', 'mam.detailView' ])
 
 // markdown config
 .config([ 'markedProvider',
@@ -18,9 +18,6 @@ function(  markedProvider ) {
 function(  $routeProvider ) {
 	// default routes
 	$routeProvider
-	.when( '/error', {
-		templateUrl: 'error.html'
-	})
 	.otherwise({ redirectTo : '/' });
 }])
 

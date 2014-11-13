@@ -1,5 +1,28 @@
 /*global $*/
-angular.module( 'mam.detailView', [] )
+angular.module( 'mam.detailView', [ 'ngRoute', 'qgovMam.config' ] )
+
+
+.config([ '$routeProvider', 'SOURCE',
+function(  $routeProvider,   SOURCE ) {
+	$routeProvider.when( '/:title', {
+		// tidy up old MAM URLs
+		redirectTo: function() {
+			window.location.href = window.location.href.replace( /\?[^#]*/, '' );
+		},
+		controller: 'DetailController',
+		controllerAs: 'vm',
+		templateUrl: 'detail.html',
+		resolve: {
+			title: [ '$route', function( $route ) {
+				return $route.current.params.title;
+			}],
+			json: [ 'ckan', function( ckan ) {
+				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
+			}]
+		}
+	});
+}])
+
 
 .controller( 'DetailController', [ 'title', 'mapModel', 'json',
 function(                           title,   mapModel,   json ) {

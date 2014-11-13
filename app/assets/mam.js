@@ -5253,10 +5253,19 @@ function(                  $http,   $q ) {
 		// dataset UUID format check
 		// http://stackoverflow.com/questions/19989481/how-to-determine-if-a-string-is-a-valid-v4-uuid
 		if ( /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89AB][0-9a-f]{3}-[0-9a-f]{12}$/.test( args.resourceId )) {
-			from.push( args.resourceId );
+			from.push( '"' + args.resourceId + '"' );
 		} else {
 			defer.reject( 'Invalid resource ID: ' + args.resourceId );
 			return defer.promise;
+		}
+
+		// full text searching
+		// https://data.qld.gov.au/api/action/datastore_search_sql?sql=SELECT+%22Latitude%22%2C%22Longitude%22%2C%22Name%22%2C%22Description%22%2C%22Capabilities%22%2C%22Facilities%22%2C%22Weblink%22%2C%22Sector%22+from+%228b9178e0-2995-42ad-8e55-37c15b4435a3%22%2C+plainto_tsquery(+%27english%27%2C+%27innovation%27+)+query+WHERE+1+%3D+1+AND+_full_text+%40%40+query
+		// https://data.qld.gov.au/api/action/datastore_search_sql?sql=SELECT+*+from+%228b9178e0-2995-42ad-8e55-37c15b4435a3%22%2C+plainto_tsquery(+%27english%27%2C+%27innovation%27+)+query+WHERE+1+%3D+1+AND+_full_text+%40%40+query
+		// https://data.qld.gov.au/api/action/datastore_search_sql?sql=SELECT+*+FROM+%2281d78d4f-0cad-4145-9fe6-43526036cabf,plainto_tsquery(+%27english%27,+%27Brisbane%27+)+query%22+WHERE+1=1+AND+_full_text+@@+query
+		if ( args.fullText ) {
+			from.push( 'plainto_tsquery( \'english\', \'' + args.fullText + '\' ) query' );
+			where.push( '_full_text @@ query' );
 		}
 
 		// where clause
@@ -5267,7 +5276,7 @@ function(                  $http,   $q ) {
 		}
 
 		angular.extend( params, {
-			sql: 'SELECT * FROM "' + from.join( ',' ) + '" WHERE ' + where
+			sql: 'SELECT * FROM ' + from.join( ',' ) + ' WHERE ' + where
 		});
 		// console.log( params.sql );
 
@@ -5296,7 +5305,34 @@ function(            sqlRequest ) {
 	});
 }])
 ;;/*global $*/
-angular.module( 'mam.searchView', [] )
+angular.module( 'mam.searchView', [ 'ngRoute', 'qgovMam.config' ])
+
+
+.config([ '$routeProvider', 'SOURCE',
+function(  $routeProvider,   SOURCE ) {
+// search results
+	$routeProvider.when( '/', {
+		// old MAM detail view URLs: ?title=<title>
+		redirectTo: function() {
+			// https://github.com/angular/angular.js/issues/7239
+			if ( /title=[^&]/.test( window.location.search )) {
+				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
+			}
+		},
+		controller: 'SearchController',
+		controllerAs: 'vm',
+		templateUrl: 'search.html',
+		resolve: {
+			pageNumber: [ '$location', function( $location ) {
+				return parseInt( $location.search().page, 10 ) || 1;
+			}],
+			json: [ 'ckan', function( ckan ) {
+				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
+			}]
+		}
+	});
+}])
+
 
 .controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'mapModel', 'pageNumber', 'json',
 function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapModel,   pageNumber,   json ) {
@@ -5348,7 +5384,30 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 
 }]);
 ;/*global $*/
-angular.module( 'mam.detailView', [] )
+angular.module( 'mam.detailView', [ 'ngRoute', 'qgovMam.config' ] )
+
+
+.config([ '$routeProvider', 'SOURCE',
+function(  $routeProvider,   SOURCE ) {
+	$routeProvider.when( '/:title', {
+		// tidy up old MAM URLs
+		redirectTo: function() {
+			window.location.href = window.location.href.replace( /\?[^#]*/, '' );
+		},
+		controller: 'DetailController',
+		controllerAs: 'vm',
+		templateUrl: 'detail.html',
+		resolve: {
+			title: [ '$route', function( $route ) {
+				return $route.current.params.title;
+			}],
+			json: [ 'ckan', function( ckan ) {
+				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
+			}]
+		}
+	});
+}])
+
 
 .controller( 'DetailController', [ 'title', 'mapModel', 'json',
 function(                           title,   mapModel,   json ) {
@@ -5374,7 +5433,7 @@ function(                           title,   mapModel,   json ) {
 
 }]);
 ;/*global $*/
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
+angular.module( 'qgovMam.config', [] )
 
 // search results
 .constant( 'RESULTS_PER_PAGE', 10 )
@@ -5390,8 +5449,9 @@ angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 
 		server: source[ 1 ],
 		uri: sourceUri
 	};
-}()))
-
+}()));
+;/*global $*/
+angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
 
 // markdown config
 .config([ 'markedProvider',
@@ -5406,54 +5466,12 @@ function(  markedProvider ) {
 
 
 // routing
-.config([ '$routeProvider', 'SOURCE',
-function(  $routeProvider,   SOURCE ) {
+.config([ '$routeProvider',
+function(  $routeProvider ) {
+	// default routes
 	$routeProvider
-
-	// route error
 	.when( '/error', {
 		templateUrl: 'error.html'
-	})
-
-	// search results
-	.when( '/', {
-		// old MAM detail view URLs: ?title=<title>
-		redirectTo: function() {
-			// https://github.com/angular/angular.js/issues/7239
-			if ( /title=[^&]/.test( window.location.search )) {
-				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
-			}
-		},
-		controller: 'SearchController',
-		controllerAs: 'vm',
-		templateUrl: 'search.html',
-		resolve: {
-			pageNumber: [ '$location', function( $location ) {
-				return parseInt( $location.search().page, 10 ) || 1;
-			}],
-			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
-			}]
-		}
-	})
-
-	// details view
-	.when( '/:title', {
-		// tidy up old MAM URLs
-		redirectTo: function() {
-			window.location.href = window.location.href.replace( /\?[^#]*/, '' );
-		},
-		controller: 'DetailController',
-		controllerAs: 'vm',
-		templateUrl: 'detail.html',
-		resolve: {
-			title: [ '$route', function( $route ) {
-				return $route.current.params.title;
-			}],
-			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
-			}]
-		}
 	})
 	.otherwise({ redirectTo : '/' });
 }])
@@ -5473,6 +5491,7 @@ function( $rootScope,   $location ) {
 	});
 
 	$rootScope.$on( '$routeChangeError', function() {
+		// console.log( '$routeChangeError' );
 		$location.path( '/error' );
 	});
 }]);

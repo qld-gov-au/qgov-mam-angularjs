@@ -136,6 +136,7 @@ module.exports = function(grunt) {
           'app/scripts/ckan.js',
           'app/scripts/searchController.js',
           'app/scripts/detailController.js',
+          'app/scripts/config.js',
           'app/scripts/app.js',
         ]
       },

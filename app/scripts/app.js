@@ -11,7 +11,7 @@ angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 
 	var sourceUri = $( 'meta[name="DCTERMS.source"]' ).attr( 'content' );
 	var source = sourceUri.split( /\/+/ );
 	return {
-		dataset: source[ source.length - 1],
+		resourceId: source[ source.length - 1],
 		server: source[ 1 ],
 		uri: sourceUri
 	};
@@ -57,7 +57,7 @@ function(  $routeProvider,   SOURCE ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest({ dataset: SOURCE.dataset });
+				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
 			}]
 		}
 	})
@@ -76,7 +76,7 @@ function(  $routeProvider,   SOURCE ) {
 				return $route.current.params.title;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest({ dataset: SOURCE.dataset });
+				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
 			}]
 		}
 	})

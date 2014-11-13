@@ -190,18 +190,34 @@ module.exports = function(grunt) {
       },
     },
 
-    includereplace: {
+    copy: {
       demo: {
-        options: {
-          prefix: '<!--#include virtual="/assets/includes/global/',
-          suffix: '" -->',
-          includesDir: 'app/assets/includes/global'
-        },
-        src: 'app/**/*.html',
-        dest: 'demo/'
+        files: [{
+          expand: true,
+          cwd: 'app/demo',
+          src: '**',
+          dest: 'demo/'
+        }]
+      }
+    },
+
+    replace: {
+      demo: {
+        src: ['demo/**/index.html'],
+        overwrite: true,
+        replacements: [{
+          from: /<!--#include\s+virtual="\/assets\/includes\/global\/([a-z-]+.html)"\s*-->/g,
+          to: function (matchedWord, index, fullText, regexMatches) {
+            return grunt.file.read( 'app/assets/includes/global/' + regexMatches[ 0 ] );
+          }
+        }, {
+          from: '/assets/mam.js',
+          to: '../app/assets/mam.js'
+        }]
       }
     }
-  });
+  }
+);
 
 
   //single run tests
@@ -231,6 +247,6 @@ module.exports = function(grunt) {
   //server daemon
   grunt.registerTask('serve', ['connect:webserver']);
 
-  // prepare demo files
-  grunt.registerTask('demo', ['includereplace:demo'])
+  // generate static demo pages
+  grunt.registerTask('demo', ['copy:demo', 'replace:demo']);
 };

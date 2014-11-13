@@ -188,8 +188,21 @@ module.exports = function(grunt) {
           dir : 'coverage/'
         }
       },
+    },
+
+    includereplace: {
+      demo: {
+        options: {
+          prefix: '<!--#include virtual="/assets/includes/global/',
+          suffix: '" -->',
+          includesDir: 'app/assets/includes/global'
+        },
+        src: 'app/**/*.html',
+        dest: 'demo/'
+      }
     }
   });
+
 
   //single run tests
   grunt.registerTask('test', ['jshint','test:unit', 'test:e2e']);
@@ -217,4 +230,7 @@ module.exports = function(grunt) {
 
   //server daemon
   grunt.registerTask('serve', ['connect:webserver']);
+
+  // prepare demo files
+  grunt.registerTask('demo', ['includereplace:demo'])
 };

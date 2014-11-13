@@ -1,0 +1,18 @@
+<div id="view">
+	<div id="app-viewport-info">
+		<h2>{{ vm.item.Name }}</h2>
+		<div id="description" marked="vm.item.Description"></div>
+
+		<div id="capabilities" class="section">
+			<h3>Capabilities</h3>
+			<div class="inner" marked="vm.item.Capabilities"></div>
+		</div>
+		<div id="facilities" class="section">
+			<h3>Facilities</h3>
+			<div class="inner" marked="vm.item.Facilities"></div>
+		</div>
+		<p id="weblink">
+			<a ng-href="{{ vm.item.Weblink }}" class="outbound-link">Visit the website for more information</a>
+		</p>
+	</div>
+</div>

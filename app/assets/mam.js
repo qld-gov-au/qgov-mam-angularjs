@@ -5243,12 +5243,12 @@ if (typeof exports === 'object') {
 .factory( 'sqlRequest', [ '$http', '$q',
 function(                  $http,   $q ) {
 
-	return function( dataset ) {
+	return function( args ) {
 		var params = params || {};
 		var defer = $q.defer();
 
 		angular.extend( params, {
-			sql: 'SELECT * FROM "' + dataset + '" WHERE 1=1'
+			sql: 'SELECT * FROM "' + args.dataset + '" WHERE 1=1'
 		});
 
 		$http.get( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
@@ -5412,7 +5412,7 @@ function(  $routeProvider,   SOURCE ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest( SOURCE.dataset );
+				return ckan.sqlRequest({ dataset: SOURCE.dataset });
 			}]
 		}
 	})
@@ -5431,7 +5431,7 @@ function(  $routeProvider,   SOURCE ) {
 				return $route.current.params.title;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest( SOURCE.dataset );
+				return ckan.sqlRequest({ dataset: SOURCE.dataset });
 			}]
 		}
 	})

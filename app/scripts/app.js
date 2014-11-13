@@ -57,7 +57,7 @@ function(  $routeProvider,   SOURCE ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest( SOURCE.dataset );
+				return ckan.sqlRequest({ dataset: SOURCE.dataset });
 			}]
 		}
 	})
@@ -76,7 +76,7 @@ function(  $routeProvider,   SOURCE ) {
 				return $route.current.params.title;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest( SOURCE.dataset );
+				return ckan.sqlRequest({ dataset: SOURCE.dataset });
 			}]
 		}
 	})

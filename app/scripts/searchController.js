@@ -15,7 +15,7 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 	mapModel.setMarkers(
 		$.map( json.result.records, function( record ) {
 			return {
-				title: record.Title,
+				title: record.Title || record.Name,
 				lat: parseFloat( record.Latitude ),
 				lng: parseFloat( record.Longitude )
 			};

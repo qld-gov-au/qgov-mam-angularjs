@@ -5292,7 +5292,7 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 	mapModel.setMarkers(
 		$.map( json.result.records, function( record ) {
 			return {
-				title: record.Title,
+				title: record.Title || record.Name,
 				lat: parseFloat( record.Latitude ),
 				lng: parseFloat( record.Longitude )
 			};
@@ -5327,7 +5327,8 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 	}
 
 }]);
-;angular.module( 'mam.detailView', [] )
+;/*global $*/
+angular.module( 'mam.detailView', [] )
 
 .controller( 'DetailController', [ 'title', 'mapModel', 'json',
 function(                           title,   mapModel,   json ) {
@@ -5336,7 +5337,7 @@ function(                           title,   mapModel,   json ) {
 	var vm = this;
 
 	var item = json.result.records.filter(function( item ) {
-		return title === item.Title || title === item.Name;
+		return title === $.trim( item.Title ) || title === $.trim( item.Name );
 	});
 
 	if ( item.length > 0 ) {
@@ -5346,7 +5347,7 @@ function(                           title,   mapModel,   json ) {
 	}
 
 	mapModel.setMarkers([{
-		title: vm.item.Title,
+		title: vm.item.Title || vm.item.Name,
 		lat: parseFloat( vm.item.Latitude ),
 		lng: parseFloat( vm.item.Longitude )
 	}]);

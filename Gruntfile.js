@@ -212,7 +212,7 @@ module.exports = function(grunt) {
           }
         }, {
           from: '/assets/mam.js',
-          to: '/qgov-mam-angularjs/app/assets/mam.js'
+          to: '../../app/assets/mam.js'
         }]
       }
     }

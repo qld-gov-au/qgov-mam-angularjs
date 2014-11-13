@@ -1,3 +1,4 @@
+/*global $*/
 angular.module( 'mam.detailView', [] )
 
 .controller( 'DetailController', [ 'title', 'mapModel', 'json',
@@ -7,7 +8,7 @@ function(                           title,   mapModel,   json ) {
 	var vm = this;
 
 	var item = json.result.records.filter(function( item ) {
-		return title === item.Title || title === item.Name;
+		return title === $.trim( item.Title ) || title === $.trim( item.Name );
 	});
 
 	if ( item.length > 0 ) {
@@ -17,7 +18,7 @@ function(                           title,   mapModel,   json ) {
 	}
 
 	mapModel.setMarkers([{
-		title: vm.item.Title,
+		title: vm.item.Title || vm.item.Name,
 		lat: parseFloat( vm.item.Latitude ),
 		lng: parseFloat( vm.item.Longitude )
 	}]);

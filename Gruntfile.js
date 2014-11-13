@@ -157,7 +157,7 @@ module.exports = function(grunt) {
 
     open: {
       devserver: {
-        path: 'http://localhost:8888'
+        path: 'http://localhost:8888/demo/'
       },
       coverage: {
         path: 'http://localhost:5555'

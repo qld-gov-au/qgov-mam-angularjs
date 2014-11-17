@@ -38,11 +38,12 @@ function(                  $http,   $q ) {
 		}
 
 		angular.extend( params, {
-			sql: 'SELECT * FROM ' + from.join( ',' ) + ' WHERE ' + where
+			sql: 'SELECT * FROM ' + from.join( ',' ) + ' WHERE ' + where,
+			callback: 'JSON_CALLBACK'
 		});
 		// console.log( params.sql );
 
-		$http.get( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
+		$http.jsonp( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
 			params: params,
 			cache: true
 		})

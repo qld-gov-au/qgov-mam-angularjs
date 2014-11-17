@@ -1,5 +1,5 @@
 /*global $, L, qg*/
-angular.module( 'map', [] )
+angular.module( 'qgov.map', [] )
 
 // map details
 .constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )

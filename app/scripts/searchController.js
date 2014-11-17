@@ -86,4 +86,26 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 		vm.pagination.pages.push( i );
 	}
 
+}])
+
+
+// search form
+.controller( 'SearchFormController', [ '$location',
+function(                               $location ) {
+
+
+	var form = this;
+
+	// read params from URL
+	form.search = $location.search();
+
+	// apply filter to search results
+	form.submit = function() {
+		$location.search({
+			query: form.search.query ? form.search.query : null
+		});
+	};
+
+	// console.log( form );
+
 }]);

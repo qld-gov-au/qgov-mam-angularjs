@@ -11,7 +11,7 @@ angular.module( 'qgov', [] )
 	$scope.swe = swe;
 });
 ;/*global $, L, qg*/
-angular.module( 'map', [] )
+angular.module( 'qgov.map', [] )
 
 // map details
 .constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )
@@ -69,6 +69,8 @@ function(                $rootScope,   MAX_ZOOM ) {
 			return model.paths;
 		},
 		setMarkers: function( dataset ) {
+			console.log( 'setMarkers', dataset.length, dataset );
+
 			// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/marker
 			model.markers = $.map( dataset, function( marker ) {
 				marker.focus = true;
@@ -77,12 +79,14 @@ function(                $rootScope,   MAX_ZOOM ) {
 				return marker;
 			});
 
+			// only one marker
 			if ( model.markers.length === 1 ) {
-				// only one marker, zoom in on it
+				// zoom in on it
 				model.center.lat = model.markers[ 0 ].lat;
 				model.center.lng = model.markers[ 0 ].lng;
 				model.center.zoom = MAX_ZOOM;
 
+				// draw a circle around it
 				model.paths.target = {
 					type: 'circleMarker',
 					radius: 100,
@@ -111,7 +115,9 @@ function(                        mapModel,   $scope,   $location ) {
 
 	// map UI
 	// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/simple-map
-	map.config = { scrollWheelZoom: true };
+	map.config = {
+		scrollWheelZoom: true
+	};
 
 	// http://leaflet-extras.github.io/leaflet-providers/preview/
 	map.layers = mapModel.layers();
@@ -5327,6 +5333,12 @@ function(  $routeProvider,   SOURCE ) {
 			// https://github.com/angular/angular.js/issues/7239
 			if ( /title=[^&]/.test( window.location.search )) {
 				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
+
+			} else if ( window.location.search.length > 0 ) {
+				// put search params into fragment
+				var search = window.location.search;
+				window.location.href = window.location.href.replace( /\?[^#]*/, '' );
+				return '/' + search;
 			}
 		},
 		controller: 'SearchController',
@@ -5336,8 +5348,12 @@ function(  $routeProvider,   SOURCE ) {
 			pageNumber: [ '$location', function( $location ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
-			json: [ 'ckan', function( ckan ) {
-				return ckan.datastoreSearchSQL({ resourceId: SOURCE.resourceId });
+			json: [  'ckan', '$location',
+			function( ckan,   $location ) {
+				return ckan.datastoreSearchSQL({
+					resourceId: SOURCE.resourceId,
+					fullText: $location.search().query
+				});
 			}]
 		}
 	});
@@ -5391,6 +5407,28 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 	for ( var i = minPage; i <= maxPage; i++ ) {
 		vm.pagination.pages.push( i );
 	}
+
+}])
+
+
+// search form
+.controller( 'SearchFormController', [ '$location',
+function(                               $location ) {
+
+
+	var form = this;
+
+	// read params from URL
+	form.search = $location.search();
+
+	// apply filter to search results
+	form.submit = function() {
+		$location.search({
+			query: form.search.query ? form.search.query : null
+		});
+	};
+
+	// console.log( form );
 
 }]);
 ;/*global $*/
@@ -5461,7 +5499,7 @@ angular.module( 'qgovMam.config', [] )
 	};
 }()));
 ;/*global $*/
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.errorView', 'mam.searchView', 'mam.detailView' ])
+angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'qgov.map', 'hc.marked', 'mam.errorView', 'mam.searchView', 'mam.detailView' ])
 
 // markdown config
 .config([ 'markedProvider',

@@ -11,6 +11,12 @@ function(  $routeProvider,   SOURCE ) {
 			// https://github.com/angular/angular.js/issues/7239
 			if ( /title=[^&]/.test( window.location.search )) {
 				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
+
+			} else if ( window.location.search.length > 0 ) {
+				// put search params into fragment
+				var search = window.location.search;
+				window.location.href = window.location.href.replace( /\?[^#]*/, '' );
+				return '/' + search;
 			}
 		},
 		controller: 'SearchController',
@@ -20,8 +26,12 @@ function(  $routeProvider,   SOURCE ) {
 			pageNumber: [ '$location', function( $location ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
-			json: [ 'ckan', function( ckan ) {
-				return ckan.datastoreSearchSQL({ resourceId: SOURCE.resourceId });
+			json: [  'ckan', '$location',
+			function( ckan,   $location ) {
+				return ckan.datastoreSearchSQL({
+					resourceId: SOURCE.resourceId,
+					fullText: $location.search().query
+				});
 			}]
 		}
 	});

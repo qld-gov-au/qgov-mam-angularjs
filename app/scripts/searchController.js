@@ -21,7 +21,7 @@ function(  $routeProvider,   SOURCE ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
+				return ckan.datastoreSearchSQL({ resourceId: SOURCE.resourceId });
 			}]
 		}
 	});

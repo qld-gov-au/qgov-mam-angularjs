@@ -17,7 +17,7 @@ function(  $routeProvider,   SOURCE ) {
 				return $route.current.params.title;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest({ resourceId: SOURCE.resourceId });
+				return ckan.datastoreSearchSQL({ resourceId: SOURCE.resourceId });
 			}]
 		}
 	});

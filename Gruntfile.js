@@ -127,7 +127,7 @@ module.exports = function(grunt) {
           // 'bower_components/angular-route/angular-route.js',
           // 'bower_components/angular-animate/angular-animate.js',
           'app/scripts/qgovTemplateController.js',
-          'app/scripts/mapController.js',
+          'app/scripts/qgovMapController.js',
           'bower_components/leaflet/dist/leaflet.js',
           'bower_components/leaflet.markercluster/dist/leaflet.markercluster.js',
           'bower_components/leaflet.fullscreen/Control.FullScreen.js',

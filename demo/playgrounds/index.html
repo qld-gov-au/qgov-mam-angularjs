@@ -136,9 +136,7 @@
 
 
 
-					<div data-ng-controller="MapController as map">
-						<leaflet id="map_canvas" style="height:270px" defaults="map.config" center="map.center" layers="map.layers" markers="map.markers" paths="map.paths"></leaflet>
-					</div>
+					<div data-ng-controller="qgovMapController"><div id="map_canvas"></div></div>
 					<div data-ng-view data-autoscroll></div>
 
 

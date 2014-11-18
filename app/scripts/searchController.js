@@ -1,8 +1,45 @@
 /*global $*/
-angular.module( 'mam.searchView', [] )
+angular.module( 'mam.searchView', [ 'ngRoute', 'qgovMam.config' ])
 
-.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'mapModel', 'pageNumber', 'json',
-function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapModel,   pageNumber,   json ) {
+
+.config([ '$routeProvider', 'SOURCE',
+function(  $routeProvider,   SOURCE ) {
+// search results
+	$routeProvider.when( '/', {
+		// old MAM detail view URLs: ?title=<title>
+		redirectTo: function() {
+			// https://github.com/angular/angular.js/issues/7239
+			if ( /title=[^&]/.test( window.location.search )) {
+				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
+
+			} else if ( window.location.search.length > 0 ) {
+				// put search params into fragment
+				var search = window.location.search;
+				window.location.href = window.location.href.replace( /\?[^#]*/, '' );
+				return '/' + search;
+			}
+		},
+		controller: 'SearchController',
+		controllerAs: 'vm',
+		templateUrl: 'search.html',
+		resolve: {
+			pageNumber: [ '$location', function( $location ) {
+				return parseInt( $location.search().page, 10 ) || 1;
+			}],
+			json: [  'ckan', '$location',
+			function( ckan,   $location ) {
+				return ckan.datastoreSearchSQL({
+					resourceId: SOURCE.resourceId,
+					fullText: $location.search().query
+				});
+			}]
+		}
+	});
+}])
+
+
+.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'qgovMapModel', 'pageNumber', 'json',
+function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovMapModel,   pageNumber,   json ) {
 
 	// view model
 	var vm = this;
@@ -12,12 +49,11 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 
 	vm.searchResults = json.result.records.slice( firstResultOnPage - 1, firstResultOnPage + RESULTS_PER_PAGE );
 
-	mapModel.setMarkers(
+	qgovMapModel.setMarkers(
 		$.map( json.result.records, function( record ) {
 			return {
-				title: record.Title || record.Name,
-				lat: parseFloat( record.Latitude ),
-				lng: parseFloat( record.Longitude )
+				latlng: [ parseFloat( record.Latitude ), parseFloat( record.Longitude ) ],
+				options: { title: record.Title || record.Name }
 			};
 		})
 	);
@@ -48,5 +84,27 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 	for ( var i = minPage; i <= maxPage; i++ ) {
 		vm.pagination.pages.push( i );
 	}
+
+}])
+
+
+// search form
+.controller( 'SearchFormController', [ '$location',
+function(                               $location ) {
+
+
+	var form = this;
+
+	// read params from URL
+	form.search = $location.search();
+
+	// apply filter to search results
+	form.submit = function() {
+		$location.search({
+			query: form.search.query ? form.search.query : null
+		});
+	};
+
+	// console.log( form );
 
 }]);

@@ -1,8 +1,8 @@
-<div class="search-widget" id="tmr-search">
+<div class="search-widget" id="tmr-search" ng-controller="SearchFormController as form">
 	<div class="widget-header">
 		<h2>Refine search</h2>
 	</div>
-	<form id="app-viewport-tools-search">
+	<form id="app-viewport-tools-search" ng-submit="form.submit()">
 		<ol class="questions form-section">
 			<li class="widget-col-full">
 				<label for="location">
@@ -38,7 +38,7 @@
 			</li>
 			<li class="widget-col-full">
 				<label for="query">Keywords</label>
-				<input accesskey="6" type="text" name="query" id="query" size="25" value="" placeholder="Enter search term" />
+				<input accesskey="6" type="search" ng-model="form.search.query" id="query" size="25" placeholder="Enter search term" />
 			</li>
 		</ol>
 		<ol class="footer-section questions">
@@ -50,7 +50,7 @@
 						</strong>
 					</li>
 					<li>
-							<input class="reset" type="button" value="Reset" />
+						<input class="reset" type="button" value="Reset" />
 					</li>
 				</ul>
 			</li>

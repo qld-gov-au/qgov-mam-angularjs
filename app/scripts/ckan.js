@@ -3,8 +3,8 @@ angular.module( 'ckanApi', [] )
 
 // SQL request
 // http://docs.ckan.org/en/latest/maintaining/datastore.html#ckanext.datastore.logic.action.datastore_search_sql
-.factory( 'sqlRequest', [ '$http', '$q',
-function(                  $http,   $q ) {
+.factory( 'datastoreSearchSQL', [ '$http', '$q',
+function(                          $http,   $q ) {
 
 	return function( args ) {
 		var params = {};
@@ -38,11 +38,12 @@ function(                  $http,   $q ) {
 		}
 
 		angular.extend( params, {
-			sql: 'SELECT * FROM ' + from.join( ',' ) + ' WHERE ' + where
+			sql: 'SELECT * FROM ' + from.join( ',' ) + ' WHERE ' + where,
+			callback: 'JSON_CALLBACK'
 		});
 		// console.log( params.sql );
 
-		$http.get( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
+		$http.jsonp( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
 			params: params,
 			cache: true
 		})
@@ -59,11 +60,11 @@ function(                  $http,   $q ) {
 
 
 // CKAN API
-.factory( 'ckan', [ 'sqlRequest',
-function(            sqlRequest ) {
+.factory( 'ckan', [ 'datastoreSearchSQL',
+function(            datastoreSearchSQL ) {
 
 	return ({
-		'sqlRequest': sqlRequest
+		'datastoreSearchSQL': datastoreSearchSQL
 	});
 }])
 ;

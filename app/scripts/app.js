@@ -1,5 +1,5 @@
 /*global $*/
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.errorView', 'mam.searchView', 'mam.detailView' ])
+angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'qgov.map', 'hc.marked', 'mam.errorView', 'mam.searchView', 'mam.detailView' ])
 
 // markdown config
 .config([ 'markedProvider',

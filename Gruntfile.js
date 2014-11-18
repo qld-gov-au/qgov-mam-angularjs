@@ -130,7 +130,7 @@ module.exports = function(grunt) {
           'app/scripts/mapController.js',
           'bower_components/leaflet/dist/leaflet.js',
           'bower_components/leaflet.markercluster/dist/leaflet.markercluster.js',
-          'bower_components/angular-leaflet/dist/angular-leaflet-directive.js',
+          'bower_components/leaflet.fullscreen/Control.FullScreen.js',
           'bower_components/marked/lib/marked.js',
           'bower_components/angular-marked/angular-marked.js',
           'app/scripts/ckan.js',

@@ -9,8 +9,9 @@
   },
   "dependencies": {
     "angular-marked": "Hypercubed/angular-marked#~0.0.12",
+    "leaflet": "~0.7.3",
+    "leaflet.markercluster": "~0.4.0",
     "marked": "~0.3.2",
-    "angular-leaflet": "~0.7.9",
-    "leaflet.markercluster": "~0.4.0"
+    "leaflet.fullscreen": "~1.1.3"
   }
 }

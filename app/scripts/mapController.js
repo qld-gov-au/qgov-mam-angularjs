@@ -89,12 +89,29 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 		clickable: false
 	});
 
+
+	// marker click
+	function markerClicked( title ) {
+		// get back in scope
+		// https://groups.google.com/forum/#!topic/angular/nFbtADyEHg8
+		$scope.$apply( function() {
+			// navigate to result
+			$location.path( '/' + title );
+		});
+	}
+
 	// update markers
 	$scope.$watch( qgovMapModel.markers, function( newMarkers ) {
 
 		// turn them into markers
 		var markers = $.map( newMarkers, function( data ) {
-			return $window.L.marker( data.latlng, data.options );
+			var marker = $window.L.marker( data.latlng, data.options );
+			// FYI: leaflet doesn't implement event delegation
+			// and we want the associated data anyway (leaflet only provides latlng)
+			marker.on( 'click', function() {
+				markerClicked( data.options.title );
+			});
+			return marker;
 		});
 
 		// clear old

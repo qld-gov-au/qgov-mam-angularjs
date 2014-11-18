@@ -24,8 +24,8 @@ function(  $routeProvider,   SOURCE ) {
 }])
 
 
-.controller( 'DetailController', [ 'title', 'mapModel', 'json',
-function(                           title,   mapModel,   json ) {
+.controller( 'DetailController', [ 'title', 'qgovMapModel', 'json',
+function(                           title,   qgovMapModel,   json ) {
 
 	// view model
 	var vm = this;
@@ -40,10 +40,9 @@ function(                           title,   mapModel,   json ) {
 		// error, no match
 	}
 
-	mapModel.setMarkers([{
-		title: vm.item.Title || vm.item.Name,
-		lat: parseFloat( vm.item.Latitude ),
-		lng: parseFloat( vm.item.Longitude )
+	qgovMapModel.setMarkers([{
+		latlng: [ parseFloat( vm.item.Latitude ), parseFloat( vm.item.Longitude ) ],
+		options: { title: vm.item.Title || vm.item.Name }
 	}]);
 
 }]);

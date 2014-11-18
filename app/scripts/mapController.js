@@ -1,125 +1,111 @@
-/*global $, L, qg*/
+/*global $ */
 angular.module( 'qgov.map', [] )
 
 // map details
 .constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )
 
 
-.factory( 'mapModel', [ '$rootScope', 'MAX_ZOOM',
-function(                $rootScope,   MAX_ZOOM ) {
-	// leaflet config
-	L.Icon.Default.imagePath = qg.swe.paths.assets + 'images/skin/map-marker';
-
-	var model = {
-		center: {
-			lat: -23,
-			lng: 143,
-			zoom: 4
-		},
-		layers: {
-			baselayers: {
-				street: {
-					name: 'Street map',
-					url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-					type: 'xyz',
-					options: { attribution: 'Tiles &copy; Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2013' }
-				},
-				satellite: {
-					name: 'Satellite',
-					url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-					type: 'xyz',
-					options: { attribution: 'Esri, DigitalGlobe, GeoEye, i-cubed, USDA, USGS, AEX, Getmapping, Aerogrid, IGN, IGP, swisstopo, and the GIS User Community' }
-				}
-				// , {
-				// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-				// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
-				// }, {
-				// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-				// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
-				// }]
-			}
-		},
-		markers: {},
-		paths: {}
-	};
+.factory( 'qgovMapModel', function() {
+	var markers = [];
 
 	return {
-		center: function() {
-			return model.center;
-		},
-		layers: function() {
-			return model.layers;
-		},
 		markers: function() {
-			return model.markers;
+			return markers;
 		},
-		paths: function() {
-			return model.paths;
-		},
-		setMarkers: function( dataset ) {
-			// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/marker
-			model.markers = $.map( dataset, function( marker ) {
-				marker.focus = true;
-				marker.draggable = false;
-				marker.group = 'cluster';
-				return marker;
-			});
-
-			if ( model.markers.length === 1 ) {
-				// only one marker, zoom in on it
-				model.center.lat = model.markers[ 0 ].lat;
-				model.center.lng = model.markers[ 0 ].lng;
-				model.center.zoom = MAX_ZOOM;
-
-				model.paths.target = {
-					type: 'circleMarker',
-					radius: 100,
-					latlngs: [ model.center.lat, model.center.lng ],
-					color: '#f00',
-					opacity: 0.8,
-					weight: 3,
-					fill: false,
-					clickable: false
-				};
-			} else {
-				model.paths = {};
-			}
-
-			$rootScope.$broadcast( 'changeMapMarkers' );
+		setMarkers: function( markerData ) {
+			markers = markerData;
+			// $.map( dataset, function( record ) {
+			// 	return $.window.L.marker([ record.lat, record.lng ], {
+			// 		title: record.title,
+			// 		clickable: true,
+			// 		keyboard: true,
+			// 		draggable: false
+			// 	});
+			// });
 		}
 	};
-}])
+})
 
 
-.controller( 'MapController', [ 'mapModel', '$scope', '$location',
-function(                        mapModel,   $scope,   $location ) {
+.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'MAX_ZOOM',
+function(                            qgovMapModel ,  $window ,  $scope ,  $location ,  MAX_ZOOM ) {
 
-	// view model
-	var map = this;
+	// leaflet config
+	$window.L.Icon.Default.imagePath = $window.qg.swe.paths.assets + 'images/skin/map-marker';
 
-	// map UI
-	// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/simple-map
-	map.config = { scrollWheelZoom: true };
+	// setup the DIV container
+	$( '#map_canvas' ).height( 270 );
 
-	// http://leaflet-extras.github.io/leaflet-providers/preview/
-	map.layers = mapModel.layers();
-
-	function updateMap() {
-		map.center = mapModel.center();
-		map.markers = mapModel.markers();
-		map.paths = mapModel.paths();
-	}
-
-	// when markers change
-	$scope.$on( 'changeMapMarkers', updateMap );
-
-	// onload
-	updateMap();
-
-	// marker click
-	$scope.$on( 'leafletDirectiveMarker.click', function( event, args ) {
-		var marker = map.markers[ args.markerName ];
-		$location.path( '/' + marker.title );
+	// init leaflet
+	var map = $window.L.map( 'map_canvas', {
+		center: [ -23, 143 ],
+		zoom: 5,
+		maxZoom: MAX_ZOOM,
+		fullscreenControl: true,
+		fullscreenControlOptions: { // optional
+			title:'Fullscreen'
+		}
 	});
+
+	// tile layers
+	var basemaps = {
+		'Street map': $window.L.tileLayer( '//server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+			attribution: 'Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2013'
+		}),
+		Satellite: $window.L.layerGroup([
+			$window.L.tileLayer( '//server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+				attribution: 'Esri, DigitalGlobe, GeoEye, i-cubed, USDA, USGS, AEX, Getmapping, Aerogrid, IGN, IGP, swisstopo, and the GIS User Community'
+			}),
+			$window.L.tileLayer( '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+				attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom'
+			}),
+			$window.L.tileLayer( '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+				attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom'
+			})
+		])
+	};
+
+	basemaps[ 'Street map' ].addTo( map );
+	$window.L.control.layers( basemaps, {} ).addTo( map );
+
+	// cluster layer
+	var cluster = new $window.L.MarkerClusterGroup({
+		iconCreateFunction: function( cluster ) {
+			return $window.L.divIcon({
+				iconAnchor: [ 10, 25 ],
+				html: '<img src="' + $window.L.Icon.Default.imagePath + '/cluster-marker-icon.png" alt="" />' + '<span class="count">' + cluster.getChildCount() + '</span>',
+				className: 'cluster-icon'
+			});
+		}
+	});
+
+	// update markers
+	$scope.$watch( qgovMapModel.markers, function( newMarkers ) {
+
+		// turn them into markers
+		var markers = $.map( newMarkers, function( data ) {
+			return $window.L.marker( data.latlng, data.options );
+		});
+
+		// clear old
+		cluster.clearLayers();
+		map.removeLayer( cluster );
+
+		// add new
+		if ( markers.length ) {
+			cluster.addLayers( markers );
+			map.addLayer( cluster );
+			// fit to map
+			map.fitBounds( new $window.L.featureGroup( markers ).getBounds() );
+		}
+	});
+
+	// center on Qld
+	// center: {
+	// 	lat: -23,
+	// 	lng: 143,
+	// 	zoom: 4
+	// },
+
 
 }]);

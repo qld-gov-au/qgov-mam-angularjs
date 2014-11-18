@@ -38,8 +38,8 @@ function(  $routeProvider,   SOURCE ) {
 }])
 
 
-.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'mapModel', 'pageNumber', 'json',
-function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapModel,   pageNumber,   json ) {
+.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'qgovMapModel', 'pageNumber', 'json',
+function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovMapModel,   pageNumber,   json ) {
 
 	// view model
 	var vm = this;
@@ -49,12 +49,11 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 
 	vm.searchResults = json.result.records.slice( firstResultOnPage - 1, firstResultOnPage + RESULTS_PER_PAGE );
 
-	mapModel.setMarkers(
+	qgovMapModel.setMarkers(
 		$.map( json.result.records, function( record ) {
 			return {
-				title: record.Title || record.Name,
-				lat: parseFloat( record.Latitude ),
-				lng: parseFloat( record.Longitude )
+				latlng: [ parseFloat( record.Latitude ), parseFloat( record.Longitude ) ],
+				options: { title: record.Title || record.Name }
 			};
 		})
 	);

@@ -36,13 +36,18 @@ function(                           title,   qgovMapModel,   json ) {
 
 	if ( item.length > 0 ) {
 		vm.item = item[ 0 ];
-	} else {
+	// } else {
 		// error, no match
 	}
 
+
+	var latlng = [ parseFloat( vm.item.Latitude ), parseFloat( vm.item.Longitude ) ];
+
 	qgovMapModel.setMarkers([{
-		latlng: [ parseFloat( vm.item.Latitude ), parseFloat( vm.item.Longitude ) ],
+		latlng: latlng,
 		options: { title: vm.item.Title || vm.item.Name }
 	}]);
+
+	qgovMapModel.highlight( latlng );
 
 }]);

@@ -2,33 +2,34 @@
 angular.module( 'qgov.map', [] )
 
 // map details
+.constant( 'CENTER', [ -23, 143 ])
 .constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )
 
 
 .factory( 'qgovMapModel', function() {
 	var markers = [];
+	var areaOfInterest = null;
 
 	return {
+		areaOfInterest: function() {
+			return areaOfInterest;
+		},
 		markers: function() {
 			return markers;
 		},
 		setMarkers: function( markerData ) {
 			markers = markerData;
-			// $.map( dataset, function( record ) {
-			// 	return $.window.L.marker([ record.lat, record.lng ], {
-			// 		title: record.title,
-			// 		clickable: true,
-			// 		keyboard: true,
-			// 		draggable: false
-			// 	});
-			// });
+			areaOfInterest = null;
+		},
+		highlight: function( latlng ) {
+			areaOfInterest = latlng;
 		}
 	};
 })
 
 
-.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'MAX_ZOOM',
-function(                            qgovMapModel ,  $window ,  $scope ,  $location ,  MAX_ZOOM ) {
+.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'CENTER', 'MAX_ZOOM',
+function(                            qgovMapModel ,  $window ,  $scope ,  $location ,  CENTER ,  MAX_ZOOM ) {
 
 	// leaflet config
 	$window.L.Icon.Default.imagePath = $window.qg.swe.paths.assets + 'images/skin/map-marker';
@@ -38,8 +39,8 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 
 	// init leaflet
 	var map = $window.L.map( 'map_canvas', {
-		center: [ -23, 143 ],
-		zoom: 5,
+		center: CENTER,
+		zoom: 4,
 		maxZoom: MAX_ZOOM,
 		fullscreenControl: true,
 		fullscreenControlOptions: { // optional
@@ -79,6 +80,15 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 		}
 	});
 
+	// highlight area of interest
+	var circle = $window.L.circle( CENTER, 100, {
+		color: '#f00',
+		opacity: 0.8,
+		weight: 3,
+		fill: false,
+		clickable: false
+	});
+
 	// update markers
 	$scope.$watch( qgovMapModel.markers, function( newMarkers ) {
 
@@ -100,12 +110,15 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 		}
 	});
 
-	// center on Qld
-	// center: {
-	// 	lat: -23,
-	// 	lng: 143,
-	// 	zoom: 4
-	// },
-
+	// update circle highlight around area of interest
+	$scope.$watch( qgovMapModel.areaOfInterest, function( newLatlng ) {
+		if ( newLatlng ) {
+			circle.setLatLng( newLatlng );
+			map.addLayer( circle );
+			map.setView( newLatlng, MAX_ZOOM );
+		} else {
+			map.removeLayer( circle );
+		}
+	});
 
 }]);

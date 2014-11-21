@@ -1,3 +1,4 @@
+/*global $*/
 angular.module( 'ckanApi', [] )
 
 
@@ -28,6 +29,14 @@ function(                          $http,   $q ) {
 		if ( args.fullText ) {
 			from.push( 'plainto_tsquery( \'english\', \'' + args.fullText + '\' ) query' );
 			where.push( '_full_text @@ query' );
+		}
+
+		// filtering by column values
+		var filter = $.map( args.filter, function( value, key ) {
+			return value === '' ? null : 'upper("' + key + '") LIKE upper(\'%' + value + '%\')';
+		});
+		if ( filter.length ) {
+			where.push( filter );
 		}
 
 		// where clause

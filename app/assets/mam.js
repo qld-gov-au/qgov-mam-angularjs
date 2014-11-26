@@ -1690,11 +1690,13 @@ function(                          $http,   $q ) {
 		}
 
 		// filtering by column values
-		var filter = $.map( args.filter, function( value, key ) {
-			return value === '' ? null : 'upper("' + key + '") LIKE upper(\'%' + value + '%\')';
-		});
-		if ( filter.length ) {
-			where.push( filter );
+		if ( args.filter ) {
+			var filter = $.map( args.filter, function( value, key ) {
+				return value === '' ? null : 'upper("' + key + '") LIKE upper(\'%' + value + '%\')';
+			});
+			if ( filter.length ) {
+				where.push( filter );
+			}
 		}
 
 		// where clause

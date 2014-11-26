@@ -147,6 +147,29 @@
 				<!-- global aside -->
 
 
+				<div class="aside search" ng-controller="SearchFormController as form">
+					<h2>Search</h2>
+					<form class="search" id="app-viewport-tools-search" ng-submit="form.submit()">
+						<ol class="questions">
+					  		<li class="viewport search">
+					  			<label class="visuallyhidden" for="query">Enter search term</label>
+					  			<input ng-model="form.search.query" id="query" type="search" size="25" placeholder="Enter search term" value="">
+					  		</li>
+					  		<li class="viewport search">
+					  			<a class="all" href="#app-viewport-tools-results">Show all</a>
+					  		</li>
+					  		<li class="footer">
+					  			<ul class="actions">
+					  				<li><strong><input type="submit" value="Search"></strong></li>
+					  			</ul>
+					  		</li>
+					  	</ol>
+					  </form>
+				</div>
+
+				<div class="aside tip" role="wairole:complementary" aria-labelledby="landmark-label4">
+				  <h2 id="landmark-label4">Visiting a prison</h2> <p>Find more <a href="https://publications.qld.gov.au/dataset/qcs-visitor-fact-sheets">information about visiting correctional centres</a><small class="print-link-url"> ( https://publications.qld.gov.au/dataset/qcs-visitor-fact-sheets )</small> or view our <a href="https://publications.qld.gov.au/dataset/qcs-statewide-map">statewide map (PDF)</a><small class="print-link-url"> ( https://publications.qld.gov.au/dataset/qcs-statewide-map )</small> of our offices, camps and centres around Queensland.</p>
+				</div>
 
 			</div></div></div><!-- end #asides, .box-sizing, .border -->
 

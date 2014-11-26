@@ -1656,7 +1656,8 @@ if (typeof exports === 'object') {
     };
   }]);
 
-}());;angular.module( 'ckanApi', [] )
+}());;/*global $*/
+angular.module( 'ckanApi', [] )
 
 
 // SQL request
@@ -1686,6 +1687,16 @@ function(                          $http,   $q ) {
 		if ( args.fullText ) {
 			from.push( 'plainto_tsquery( \'english\', \'' + args.fullText + '\' ) query' );
 			where.push( '_full_text @@ query' );
+		}
+
+		// filtering by column values
+		if ( args.filter ) {
+			var filter = $.map( args.filter, function( value, key ) {
+				return value === '' ? null : 'upper("' + key + '") LIKE upper(\'%' + value + '%\')';
+			});
+			if ( filter.length ) {
+				where.push( filter );
+			}
 		}
 
 		// where clause
@@ -1764,9 +1775,19 @@ function(  $routeProvider,   SOURCE ) {
 			}],
 			json: [  'ckan', '$location',
 			function( ckan,   $location ) {
+				var search = $location.search();
+
+				// reserved search params: fulltext, latlng, distance
+				var fullText = search.query;
+
+				// custom search params
+				var filter = search;
+				delete filter.query;
+
 				return ckan.datastoreSearchSQL({
 					resourceId: SOURCE.resourceId,
-					fullText: $location.search().query
+					fullText: fullText,
+					filter: filter
 				});
 			}]
 		}
@@ -1831,14 +1852,12 @@ function(                               $location ) {
 
 	var form = this;
 
-	// read params from URL
+	// read initial params from URL
 	form.search = $location.search();
 
 	// apply filter to search results
 	form.submit = function() {
-		$location.search({
-			query: form.search.query ? form.search.query : null
-		});
+		$location.search( form.search );
 	};
 
 	// console.log( form );

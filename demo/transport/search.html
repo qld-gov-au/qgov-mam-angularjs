@@ -8,13 +8,13 @@
 				<label for="location">
 					<span class="label">Location or postcode</span>
 				</label>
-				<input type="text" name="location" id="location" size="30" value="" placeholder="Enter location or postcode" />
+				<input type="text" ng-model="form.search.location" id="location" size="30" value="" placeholder="Enter location or postcode" />
 			</li>
 			<li class="widget-col-half-left">
 				<label for="distance">
 					<span class="label">Radius</span>
 				</label>
-				<select name="distance" id="distance">
+				<select ng-model="form.search.distance" id="distance">
 					<option value="1000">1000km</option>
 					<option value="50">50km</option>
 				</select>

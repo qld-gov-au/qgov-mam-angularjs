@@ -1656,7 +1656,41 @@ if (typeof exports === 'object') {
     };
   }]);
 
-}());;/*global $*/
+}());;angular.module( 'esri-geocoder', [] )
+
+// ESRI geocoder API
+// https://developers.arcgis.com/rest/geocode/api-reference/overview-world-geocoding-service.htm
+.factory( 'geocoder', [ '$http', '$q',
+function(                $http ,  $q ) {
+
+	return ({
+		// https://developers.arcgis.com/rest/geocode/api-reference/geocoding-find-address-candidates.htm
+		'findAddressCandidates': function findAddressCandidates( params ) {
+			angular.extend( params, {
+				forStorage: false,
+				f: 'json',
+				maxLocations: 1
+			});
+
+			var defer = $q.defer();
+
+			$http.get( '//geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates', {
+				params: params,
+				cache: true
+			})
+			.success(function( data ) {
+				defer.resolve( data );
+			})
+			.error(function( data, status ) {
+				defer.reject( status );
+			});
+
+			return defer.promise;
+		}
+	});
+}])
+;
+;/*global $*/
 angular.module( 'ckanApi', [] )
 
 
@@ -1668,8 +1702,10 @@ function(                          $http,   $q ) {
 	return function( args ) {
 		var params = {};
 		var defer = $q.defer();
+		var select = [ '*' ];
 		var from = [];
 		var where = [];
+		var distance;
 
 		// dataset UUID format check
 		// http://stackoverflow.com/questions/19989481/how-to-determine-if-a-string-is-a-valid-v4-uuid
@@ -1681,12 +1717,16 @@ function(                          $http,   $q ) {
 		}
 
 		// full text searching
-		// https://data.qld.gov.au/api/action/datastore_search_sql?sql=SELECT+%22Latitude%22%2C%22Longitude%22%2C%22Name%22%2C%22Description%22%2C%22Capabilities%22%2C%22Facilities%22%2C%22Weblink%22%2C%22Sector%22+from+%228b9178e0-2995-42ad-8e55-37c15b4435a3%22%2C+plainto_tsquery(+%27english%27%2C+%27innovation%27+)+query+WHERE+1+%3D+1+AND+_full_text+%40%40+query
-		// https://data.qld.gov.au/api/action/datastore_search_sql?sql=SELECT+*+from+%228b9178e0-2995-42ad-8e55-37c15b4435a3%22%2C+plainto_tsquery(+%27english%27%2C+%27innovation%27+)+query+WHERE+1+%3D+1+AND+_full_text+%40%40+query
-		// https://data.qld.gov.au/api/action/datastore_search_sql?sql=SELECT+*+FROM+%2281d78d4f-0cad-4145-9fe6-43526036cabf,plainto_tsquery(+%27english%27,+%27Brisbane%27+)+query%22+WHERE+1=1+AND+_full_text+@@+query
 		if ( args.fullText ) {
 			from.push( 'plainto_tsquery( \'english\', \'' + args.fullText + '\' ) query' );
 			where.push( '_full_text @@ query' );
+		}
+
+		// geo searching
+		if ( args.latitude && args.longitude ) {
+			distance = '(3959*acos(cos(radians(' + args.latitude + '))*cos(radians("Latitude"))*cos(radians("Longitude")-radians(' + args.longitude + '))+sin(radians(' + args.latitude + '))*sin(radians("Latitude"))))';
+			select.push( distance + ' AS "Distance"' );
+			where.push( distance + ' <= ' + args.distance );
 		}
 
 		// filtering by column values
@@ -1707,7 +1747,7 @@ function(                          $http,   $q ) {
 		}
 
 		angular.extend( params, {
-			sql: 'SELECT * FROM ' + from.join( ',' ) + ' WHERE ' + where,
+			sql: 'SELECT ' + select.join( ',' ) + ' FROM ' + from.join( ',' ) + ' WHERE ' + where,
 			callback: 'JSON_CALLBACK'
 		});
 		// console.log( params.sql );
@@ -1746,11 +1786,11 @@ function(  $routeProvider ) {
 	});
 }]);
 ;/*global $*/
-angular.module( 'mam.searchView', [ 'ngRoute', 'qgovMam.config' ])
+angular.module( 'mam.searchView', [ 'ngRoute', 'esri-geocoder', 'qgovMam.config' ])
 
 
-.config([ '$routeProvider', 'SOURCE',
-function(  $routeProvider,   SOURCE ) {
+.config([ '$routeProvider',
+function(  $routeProvider ) {
 // search results
 	$routeProvider.when( '/', {
 		// old MAM detail view URLs: ?title=<title>
@@ -1773,20 +1813,36 @@ function(  $routeProvider,   SOURCE ) {
 			pageNumber: [ '$location', function( $location ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
-			json: [  'ckan', '$location',
-			function( ckan,   $location ) {
+			json: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$location',
+			function( geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $location ) {
 				var search = $location.search();
 
-				// reserved search params: fulltext, latlng, distance
-				var fullText = search.query;
-
-				// custom search params
-				var filter = search;
+				// reserved search params: fulltext, location, distance
+				var filter = angular.copy( search );
 				delete filter.query;
+				delete filter.location;
+				delete filter.distance;
+
+				// geo search
+				if ( search.location ) {
+					return geocoder.findAddressCandidates({
+						singleLine: search.location,
+						countryCode: 'AU',
+					}).then(function( geoResponse ) {
+						return ckan.datastoreSearchSQL({
+							resourceId: SOURCE.resourceId,
+							fullText: search.fullText,
+							latitude: geoResponse.candidates[ 0 ].location.y,
+							longitude: geoResponse.candidates[ 0 ].location.x,
+							distance: search.distance || DEFAULT_GEO_RADIUS,
+							filter: filter
+						});
+					});
+				}
 
 				return ckan.datastoreSearchSQL({
 					resourceId: SOURCE.resourceId,
-					fullText: fullText,
+					fullText: search.fullText,
 					filter: filter
 				});
 			}]
@@ -1846,8 +1902,8 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovM
 
 
 // search form
-.controller( 'SearchFormController', [ '$location',
-function(                               $location ) {
+.controller( 'SearchFormController', [ 'geocoder', '$location',
+function(                               geocoder ,  $location ) {
 
 
 	var form = this;
@@ -1920,6 +1976,7 @@ function(                           title,   qgovMapModel,   json ) {
 angular.module( 'qgovMam.config', [] )
 
 // search results
+.constant( 'DEFAULT_GEO_RADIUS', 1000 ) // km
 .constant( 'RESULTS_PER_PAGE', 10 )
 .constant( 'PAGES_AVAILABLE', 10 )
 

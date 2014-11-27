@@ -1,9 +1,9 @@
 /*global $*/
-angular.module( 'mam.searchView', [ 'ngRoute', 'qgovMam.config' ])
+angular.module( 'mam.searchView', [ 'ngRoute', 'esri-geocoder', 'qgovMam.config' ])
 
 
-.config([ '$routeProvider', 'SOURCE',
-function(  $routeProvider,   SOURCE ) {
+.config([ '$routeProvider',
+function(  $routeProvider ) {
 // search results
 	$routeProvider.when( '/', {
 		// old MAM detail view URLs: ?title=<title>
@@ -26,20 +26,36 @@ function(  $routeProvider,   SOURCE ) {
 			pageNumber: [ '$location', function( $location ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
-			json: [  'ckan', '$location',
-			function( ckan,   $location ) {
+			json: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$location',
+			function( geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $location ) {
 				var search = $location.search();
 
-				// reserved search params: fulltext, latlng, distance
-				var fullText = search.query;
-
-				// custom search params
-				var filter = search;
+				// reserved search params: fulltext, location, distance
+				var filter = angular.copy( search );
 				delete filter.query;
+				delete filter.location;
+				delete filter.distance;
+
+				// geo search
+				if ( search.location ) {
+					return geocoder.findAddressCandidates({
+						singleLine: search.location,
+						countryCode: 'AU',
+					}).then(function( geoResponse ) {
+						return ckan.datastoreSearchSQL({
+							resourceId: SOURCE.resourceId,
+							fullText: search.fullText,
+							latitude: geoResponse.candidates[ 0 ].location.y,
+							longitude: geoResponse.candidates[ 0 ].location.x,
+							distance: search.distance || DEFAULT_GEO_RADIUS,
+							filter: filter
+						});
+					});
+				}
 
 				return ckan.datastoreSearchSQL({
 					resourceId: SOURCE.resourceId,
-					fullText: fullText,
+					fullText: search.fullText,
 					filter: filter
 				});
 			}]
@@ -99,8 +115,8 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovM
 
 
 // search form
-.controller( 'SearchFormController', [ '$location',
-function(                               $location ) {
+.controller( 'SearchFormController', [ 'geocoder', '$location',
+function(                               geocoder ,  $location ) {
 
 
 	var form = this;

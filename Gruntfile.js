@@ -133,6 +133,7 @@ module.exports = function(grunt) {
           'bower_components/leaflet.fullscreen/Control.FullScreen.js',
           'bower_components/marked/lib/marked.js',
           'bower_components/angular-marked/angular-marked.js',
+          'app/scripts/angular-geocoder-esri.js',
           'app/scripts/ckan.js',
           'app/scripts/errorController.js',
           'app/scripts/searchController.js',

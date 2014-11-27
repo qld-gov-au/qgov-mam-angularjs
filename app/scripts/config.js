@@ -2,6 +2,7 @@
 angular.module( 'qgovMam.config', [] )
 
 // search results
+.constant( 'DEFAULT_GEO_RADIUS', 1000 ) // km
 .constant( 'RESULTS_PER_PAGE', 10 )
 .constant( 'PAGES_AVAILABLE', 10 )
 

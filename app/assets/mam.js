@@ -92,6 +92,23 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 		}
 	});
 
+
+	// Replacing default values for button accessibility
+	$( '.leaflet-control-zoom-fullscreen' ).html( 'Fullscreen' );
+	$( '.leaflet-control-zoom-out' ).html( 'Zoom out' );
+	$( '.leaflet-control-zoom-in' ).html( 'Zoom in' );
+
+	// Let's make leaflet map js more accessible :) - putting "for" on labels for input buttons within the layers selection area.
+	$( '.leaflet-control-layers-base label' ).each(function() {
+		//for each span within leaflet layer label wrapper find span content and strip spaces
+		var spanText = $.trim( $( 'span', this ).text().replace( /\s+/g, '' ));
+		// check if this name is an id already with $(~~~).generateId(spanText);
+		//set label for attribute and input id
+		var input = $( 'input', this ).generateId( spanText );
+		$( this ).attr( 'for', input.attr( 'id' ));
+	});
+
+
 	// highlight area of interest
 	var circle = $window.L.circle( CENTER, 100, {
 		color: '#f00',
@@ -111,6 +128,7 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 			$location.path( '/' + title );
 		});
 	}
+
 
 	// update markers
 	$scope.$watch( qgovMapModel.markers, function( newMarkers ) {
@@ -138,6 +156,7 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 			map.fitBounds( new $window.L.featureGroup( markers ).getBounds() );
 		}
 	});
+
 
 	// update circle highlight around area of interest
 	$scope.$watch( qgovMapModel.areaOfInterest, function( newLatlng ) {

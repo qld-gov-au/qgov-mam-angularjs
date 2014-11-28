@@ -18,9 +18,11 @@ angular.module( 'qgov.map', [] )
 .constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )
 
 
-.factory( 'qgovMapModel', function() {
+.factory( 'qgovMapModel', [ '$window',
+function(                    $window ) {
 	var markers = [];
 	var areaOfInterest = null;
+	var bounds;
 
 	return {
 		areaOfInterest: function() {
@@ -29,15 +31,39 @@ angular.module( 'qgov.map', [] )
 		markers: function() {
 			return markers;
 		},
+		bounds: function() {
+			return bounds;
+		},
 		setMarkers: function( markerData ) {
 			markers = markerData;
 			areaOfInterest = null;
 		},
 		highlight: function( latlng ) {
 			areaOfInterest = latlng;
+		},
+
+		// center on a given latlong, and zoom to show at least n Markers
+		// setBounds() : include all markers
+		// setBounds( latlong, radius, int ) : show a subset of markers near a given location
+		// assumes markers are sorted by distance from latlong
+		setView: function( latlong, radius, nMarkers ) {
+			nMarkers = nMarkers ? markers.slice( 0, nMarkers ) : markers;
+			nMarkers = $.map( nMarkers, function( data ) {
+				return $window.L.marker( data.latlng, data.options );
+			});
+			var newBounds = new $window.L.featureGroup( nMarkers );
+
+			if ( latlong ) {
+				radius = radius * 1000 || 7500; // km to m (leaflet)
+				newBounds.addLayer( $window.L.circle( latlong, radius ));
+			}
+
+			// update model
+			// bounds = newBounds.getBounds();
+			bounds = newBounds.getBounds();
 		}
 	};
-})
+}])
 
 
 .controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'CENTER', 'MAX_ZOOM',
@@ -152,8 +178,14 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 		if ( markers.length ) {
 			cluster.addLayers( markers );
 			map.addLayer( cluster );
-			// fit to map
-			map.fitBounds( new $window.L.featureGroup( markers ).getBounds() );
+		}
+	});
+
+
+	// display map bounds
+	$scope.$watch( qgovMapModel.bounds, function( newBounds ) {
+		if ( newBounds ) {
+			map.fitBounds( newBounds );
 		}
 	});
 
@@ -1773,7 +1805,7 @@ function(                          $interpolate ,  $http,   $q ) {
 			}),
 			callback: 'JSON_CALLBACK'
 		});
-		console.log( params.sql );
+		// console.log( params.sql );
 
 		$http.jsonp( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
 			params: params,
@@ -1836,9 +1868,10 @@ function(  $routeProvider ) {
 			pageNumber: [ '$location', function( $location ) {
 				return parseInt( $location.search().page, 10 ) || 1;
 			}],
-			json: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$location',
-			function( geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $location ) {
+			results: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$location',
+			function(    geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $location ) {
 				var search = $location.search();
+				var ckanResponse, geocodeResponse;
 
 				// reserved search params: fulltext, location, distance
 				var filter = angular.copy( search );
@@ -1848,11 +1881,13 @@ function(  $routeProvider ) {
 
 				// geo search
 				if ( search.location ) {
-					return geocoder.findAddressCandidates({
+					geocodeResponse = geocoder.findAddressCandidates({
 						singleLine: search.location,
 						countryCode: 'AU',
 						maxLocations: 1
-					}).then(function( geoResponse ) {
+					});
+
+					ckanResponse = geocodeResponse.then(function( geoResponse ) {
 						return ckan.datastoreSearchSQL({
 							resourceId: SOURCE.resourceId,
 							fullText: search.fullText,
@@ -1862,12 +1897,24 @@ function(  $routeProvider ) {
 							filter: filter
 						});
 					});
+
+					return $q.all([ geocodeResponse, ckanResponse ]).then(function( results ) {
+						return {
+							geocode: results[ 0 ],
+							search: results[ 1 ],
+						};
+					});
 				}
 
-				return ckan.datastoreSearchSQL({
+				ckanResponse = ckan.datastoreSearchSQL({
 					resourceId: SOURCE.resourceId,
 					fullText: search.fullText,
 					filter: filter
+				});
+				return $q.all([ ckanResponse ]).then(function( results ) {
+					return {
+						search: results[ 0 ]
+					};
 				});
 			}]
 		}
@@ -1875,25 +1922,35 @@ function(  $routeProvider ) {
 }])
 
 
-.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'qgovMapModel', 'pageNumber', 'json',
-function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovMapModel,   pageNumber,   json ) {
+.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'qgovMapModel', 'pageNumber', 'results',
+function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovMapModel,   pageNumber,   results ) {
 
 	// view model
 	var vm = this;
 
-	var total = json.result.records.length;
+	var total = results.search.result.records.length;
 	var firstResultOnPage = ( pageNumber - 1 ) * RESULTS_PER_PAGE + 1;
 
-	vm.searchResults = json.result.records.slice( firstResultOnPage - 1, firstResultOnPage + RESULTS_PER_PAGE );
+	vm.searchResults = results.search.result.records.slice( firstResultOnPage - 1, firstResultOnPage + RESULTS_PER_PAGE );
 
 	qgovMapModel.setMarkers(
-		$.map( json.result.records, function( record ) {
+		$.map( results.search.result.records, function( record ) {
 			return {
 				latlng: [ parseFloat( record.Latitude ), parseFloat( record.Longitude ) ],
 				options: { title: record.Title || record.Name }
 			};
 		})
 	);
+	qgovMapModel.setView();
+
+	if ( results.geocode ) {
+		qgovMapModel.setView({
+			lat: results.geocode.candidates[ 0 ].location.y,
+			lng: results.geocode.candidates[ 0 ].location.x
+		}, 7.5, 2 );
+	} else {
+		qgovMapModel.setView();
+	}
 
 	// result set description
 	// http://www.qld.gov.au/web/cue/module5/checkpoints/checkpoint09/

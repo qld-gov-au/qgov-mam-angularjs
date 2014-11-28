@@ -1695,8 +1695,8 @@ angular.module( 'ckanApi', [] )
 
 // SQL request
 // http://docs.ckan.org/en/latest/maintaining/datastore.html#ckanext.datastore.logic.action.datastore_search_sql
-.factory( 'datastoreSearchSQL', [ '$http', '$q',
-function(                          $http,   $q ) {
+.factory( 'datastoreSearchSQL', [ '$interpolate', '$http', '$q',
+function(                          $interpolate ,  $http,   $q ) {
 
 	return function( args ) {
 		var params = {};
@@ -1723,7 +1723,7 @@ function(                          $http,   $q ) {
 
 		// geo searching
 		if ( args.latitude && args.longitude ) {
-			distance = '(3959*acos(cos(radians(' + args.latitude + '))*cos(radians("Latitude"))*cos(radians("Longitude")-radians(' + args.longitude + '))+sin(radians(' + args.latitude + '))*sin(radians("Latitude"))))';
+			distance = $interpolate( '(3959*acos(cos(radians({{ latitude }}))*cos(radians("Latitude"))*cos(radians("Longitude")-radians({{ longitude }}))+sin(radians({{ latitude }}))*sin(radians("Latitude"))))' )( args );
 			select.push( distance + ' AS "Distance"' );
 			where.push( distance + ' <= ' + args.distance );
 		}
@@ -1731,7 +1731,10 @@ function(                          $http,   $q ) {
 		// filtering by column values
 		if ( args.filter ) {
 			var filter = $.map( args.filter, function( value, key ) {
-				return value === '' ? null : 'upper("' + key + '") LIKE upper(\'%' + value + '%\')';
+				return value === '' ? null : $interpolate( 'upper("{{ key }}") LIKE upper(\'%{{ value }}%\')' )({
+					key: key,
+					value: value
+				});
 			});
 			if ( filter.length ) {
 				where.push( filter );
@@ -1739,17 +1742,19 @@ function(                          $http,   $q ) {
 		}
 
 		// where clause
-		if ( where.length > 0 ) {
-			where = where.join( ' AND ' );
-		} else {
-			where = '1=1';
+		if ( where.length === 0 ) {
+			where = [ '1=1' ];
 		}
 
 		angular.extend( params, {
-			sql: 'SELECT ' + select.join( ',' ) + ' FROM ' + from.join( ',' ) + ' WHERE ' + where,
+			sql: $interpolate( 'SELECT {{ select }} FROM {{ from }} WHERE {{ where }}' )({
+				select: select.join( ',' ),
+				from: from.join( ',' ),
+				where: where.join( ' AND ' )
+			}),
 			callback: 'JSON_CALLBACK'
 		});
-		// console.log( params.sql );
+		console.log( params.sql );
 
 		$http.jsonp( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
 			params: params,

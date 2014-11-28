@@ -63,7 +63,7 @@ function(                          $interpolate ,  $http,   $q ) {
 			}),
 			callback: 'JSON_CALLBACK'
 		});
-		console.log( params.sql );
+		// console.log( params.sql );
 
 		$http.jsonp( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
 			params: params,

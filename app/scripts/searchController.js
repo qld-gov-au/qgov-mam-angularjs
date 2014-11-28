@@ -41,6 +41,7 @@ function(  $routeProvider ) {
 					return geocoder.findAddressCandidates({
 						singleLine: search.location,
 						countryCode: 'AU',
+						maxLocations: 1
 					}).then(function( geoResponse ) {
 						return ckan.datastoreSearchSQL({
 							resourceId: SOURCE.resourceId,

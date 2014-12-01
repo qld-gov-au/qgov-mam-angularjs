@@ -2331,6 +2331,7 @@ function(  $routeProvider ) {
 				delete filter.query;
 				delete filter.location;
 				delete filter.distance;
+				delete filter.page; // pagination
 
 				// geo search
 				if ( search.location ) {

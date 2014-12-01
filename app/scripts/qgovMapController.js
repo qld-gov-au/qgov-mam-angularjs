@@ -6,8 +6,8 @@ angular.module( 'qgov.map', [] )
 .constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )
 
 
-.factory( 'qgovMapModel', [ '$window',
-function(                    $window ) {
+.factory( 'qgovMapModel', [ '$window', 'QLD_POLY_COORDS',
+function(                    $window ,  QLD_POLY_COORDS ) {
 	var markers = [];
 	var areaOfInterest = null;
 	var bounds;
@@ -36,7 +36,7 @@ function(                    $window ) {
 		// assumes markers are sorted by distance from latlong
 		setView: function( latlong, radius, nMarkers ) {
 			if ( markers.length === 0 && ! latlong ) {
-				bounds = undefined;
+				bounds = $window.L.latLngBounds( QLD_POLY_COORDS );
 				return;
 			}
 
@@ -179,9 +179,6 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 	$scope.$watch( qgovMapModel.bounds, function( newBounds ) {
 		if ( newBounds ) {
 			map.fitBounds( newBounds );
-		} else {
-			// show Qld
-			map.setView( CENTER, 4 );
 		}
 	});
 

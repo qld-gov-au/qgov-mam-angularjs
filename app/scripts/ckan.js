@@ -48,7 +48,7 @@ function(                          $interpolate ,  $http,   $q ) {
 				});
 			});
 			if ( filter.length ) {
-				where.push( filter );
+				where = where.concat( filter );
 			}
 		}
 

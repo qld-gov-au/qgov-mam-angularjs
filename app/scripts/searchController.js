@@ -143,7 +143,6 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovM
 .controller( 'SearchFormController', [ 'geocoder', '$location',
 function(                               geocoder ,  $location ) {
 
-
 	var form = this;
 
 	// read initial params from URL
@@ -151,9 +150,8 @@ function(                               geocoder ,  $location ) {
 
 	// apply filter to search results
 	form.submit = function() {
+		$location.path( '/' );
 		$location.search( form.search );
 	};
-
-	// console.log( form );
 
 }]);

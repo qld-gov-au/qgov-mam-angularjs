@@ -13,6 +13,7 @@ function(                          $interpolate ,  $http,   $q ) {
 		var select = [ '*' ];
 		var from = [];
 		var where = [];
+		var order = [];
 		var distance;
 
 		// dataset UUID format check
@@ -35,6 +36,7 @@ function(                          $interpolate ,  $http,   $q ) {
 			distance = $interpolate( '(3959*acos(cos(radians({{ latitude }}))*cos(radians("Latitude"))*cos(radians("Longitude")-radians({{ longitude }}))+sin(radians({{ latitude }}))*sin(radians("Latitude"))))' )( args );
 			select.push( distance + ' AS "Distance"' );
 			where.push( distance + ' <= ' + args.distance );
+			order.push( '"Distance"' );
 		}
 
 		// filtering by column values
@@ -56,14 +58,14 @@ function(                          $interpolate ,  $http,   $q ) {
 		}
 
 		angular.extend( params, {
-			sql: $interpolate( 'SELECT {{ select }} FROM {{ from }} WHERE {{ where }}' )({
+			sql: $interpolate( 'SELECT {{ select }} FROM {{ from }} WHERE {{ where }}{{order}}' )({
 				select: select.join( ',' ),
 				from: from.join( ',' ),
-				where: where.join( ' AND ' )
+				where: where.join( ' AND ' ),
+				order: order.length ? ' ORDER BY ' + order.join( ',' ) : ''
 			}),
 			callback: 'JSON_CALLBACK'
 		});
-		// console.log( params.sql );
 
 		$http.jsonp( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
 			params: params,

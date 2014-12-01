@@ -6,8 +6,8 @@ angular.module( 'qgov.map', [] )
 .constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )
 
 
-.factory( 'qgovMapModel', [ '$window',
-function(                    $window ) {
+.factory( 'qgovMapModel', [ '$window', 'QLD_POLY_COORDS',
+function(                    $window ,  QLD_POLY_COORDS ) {
 	var markers = [];
 	var areaOfInterest = null;
 	var bounds;
@@ -29,12 +29,20 @@ function(                    $window ) {
 		highlight: function( latlng ) {
 			areaOfInterest = latlng;
 		},
+		highlightState: function() {
+			areaOfInterest = 'Queensland';
+		},
 
 		// center on a given latlong, and zoom to show at least n Markers
 		// setBounds() : include all markers
 		// setBounds( latlong, radius, int ) : show a subset of markers near a given location
 		// assumes markers are sorted by distance from latlong
 		setView: function( latlong, radius, nMarkers ) {
+			if ( markers.length === 0 && ! latlong ) {
+				bounds = $window.L.latLngBounds( QLD_POLY_COORDS );
+				return;
+			}
+
 			nMarkers = nMarkers ? markers.slice( 0, nMarkers ) : markers;
 			nMarkers = $.map( nMarkers, function( data ) {
 				return $window.L.marker( data.latlng, data.options );
@@ -54,8 +62,8 @@ function(                    $window ) {
 }])
 
 
-.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'CENTER', 'MAX_ZOOM',
-function(                            qgovMapModel ,  $window ,  $scope ,  $location ,  CENTER ,  MAX_ZOOM ) {
+.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'CENTER', 'MAX_ZOOM', 'QLD_POLY_COORDS',
+function(                            qgovMapModel ,  $window ,  $scope ,  $location ,  CENTER ,  MAX_ZOOM ,  QLD_POLY_COORDS ) {
 
 	// leaflet config
 	$window.L.Icon.Default.imagePath = $window.qg.swe.paths.assets + 'images/skin/map-marker';
@@ -131,6 +139,14 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 		fill: false,
 		clickable: false
 	});
+	var qld = $window.L.polygon( QLD_POLY_COORDS, {
+		color: '#f00',
+		opacity: 0.8,
+		weight: 3,
+		fill: false,
+		lineJoin: 'round',
+		clickable: false
+	});
 
 
 	// marker click
@@ -179,12 +195,21 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 
 
 	// update circle highlight around area of interest
-	$scope.$watch( qgovMapModel.areaOfInterest, function( newLatlng ) {
-		if ( newLatlng ) {
-			circle.setLatLng( newLatlng );
+	$scope.$watch( qgovMapModel.areaOfInterest, function( newArea ) {
+		if ( newArea === 'Queensland' ) {
+			map.removeLayer( circle );
+			map.addLayer( qld );
+			map.fitBounds( qld );
+
+		} else if ( newArea ) {
+			map.removeLayer( qld );
+			// assume single marker
+			circle.setLatLng( newArea );
 			map.addLayer( circle );
-			map.setView( newLatlng, MAX_ZOOM );
+			map.setView( newArea, MAX_ZOOM );
+
 		} else {
+			map.removeLayer( qld );
 			map.removeLayer( circle );
 		}
 	});

@@ -29,6 +29,9 @@ function(                    $window ,  QLD_POLY_COORDS ) {
 		highlight: function( latlng ) {
 			areaOfInterest = latlng;
 		},
+		highlightState: function() {
+			areaOfInterest = 'Queensland';
+		},
 
 		// center on a given latlong, and zoom to show at least n Markers
 		// setBounds() : include all markers
@@ -59,8 +62,8 @@ function(                    $window ,  QLD_POLY_COORDS ) {
 }])
 
 
-.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'CENTER', 'MAX_ZOOM',
-function(                            qgovMapModel ,  $window ,  $scope ,  $location ,  CENTER ,  MAX_ZOOM ) {
+.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'CENTER', 'MAX_ZOOM', 'QLD_POLY_COORDS',
+function(                            qgovMapModel ,  $window ,  $scope ,  $location ,  CENTER ,  MAX_ZOOM ,  QLD_POLY_COORDS ) {
 
 	// leaflet config
 	$window.L.Icon.Default.imagePath = $window.qg.swe.paths.assets + 'images/skin/map-marker';
@@ -136,6 +139,14 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 		fill: false,
 		clickable: false
 	});
+	var qld = $window.L.polygon( QLD_POLY_COORDS, {
+		color: '#f00',
+		opacity: 0.8,
+		weight: 3,
+		fill: false,
+		lineJoin: 'round',
+		clickable: false
+	});
 
 
 	// marker click
@@ -184,12 +195,21 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 
 
 	// update circle highlight around area of interest
-	$scope.$watch( qgovMapModel.areaOfInterest, function( newLatlng ) {
-		if ( newLatlng ) {
-			circle.setLatLng( newLatlng );
+	$scope.$watch( qgovMapModel.areaOfInterest, function( newArea ) {
+		if ( newArea === 'Queensland' ) {
+			map.removeLayer( circle );
+			map.addLayer( qld );
+			map.fitBounds( qld );
+
+		} else if ( newArea ) {
+			map.removeLayer( qld );
+			// assume single marker
+			circle.setLatLng( newArea );
 			map.addLayer( circle );
-			map.setView( newLatlng, MAX_ZOOM );
+			map.setView( newArea, MAX_ZOOM );
+
 		} else {
+			map.removeLayer( qld );
 			map.removeLayer( circle );
 		}
 	});

@@ -10,8 +10,7 @@ function(                $http ,  $q ) {
 		'findAddressCandidates': function findAddressCandidates( params ) {
 			angular.extend( params, {
 				forStorage: false,
-				f: 'json',
-				maxLocations: 1
+				f: 'json'
 			});
 
 			var defer = $q.defer();

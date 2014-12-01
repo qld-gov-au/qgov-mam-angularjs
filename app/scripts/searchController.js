@@ -93,10 +93,10 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovM
 
 	qgovMapModel.setMarkers(
 		$.map( results.search.result.records, function( record ) {
-			return {
+			return record.Latitude && record.Longitude ? {
 				latlng: [ parseFloat( record.Latitude ), parseFloat( record.Longitude ) ],
 				options: { title: record.Title || record.Name }
-			};
+			} : null;
 		})
 	);
 	qgovMapModel.setView();

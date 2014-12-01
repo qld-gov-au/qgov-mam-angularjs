@@ -56,7 +56,7 @@
 	<meta name="DCTERMS.audience" scheme="AGLSTERMS.agls-audience" content="AGLS_AUDIENCE" />
 	<meta name="DCTERMS.jurisdiction" scheme="AGLSTERMS.AglsJuri" content="Queensland" />
 	<meta name="DCTERMS.license" scheme="DCTERMS.URI" content="http://creativecommons.org/licenses/by/3.0/au/" />
-	<meta name="DCTERMS.source" scheme="DCTERMS.URI" content="https://data.qld.gov.au/dataset/data-driven-test-dataset/resource/edcb4535-5b9e-475b-8016-7400e428733a" />
+	<meta name="DCTERMS.source" scheme="DCTERMS.URI" content="https://data.qld.gov.au/dataset/victim-support-services/resource/96d6b499-e402-409c-9c91-e8c02f2801c8" />
 </head>
 
 <body id="qld-gov-au" class="residents">
@@ -146,6 +146,58 @@
 			<div id="asides"><div class="box-sizing"><div class="border">
 				<!-- global aside -->
 
+
+				<div class="aside search" ng-controller="SearchFormController as form">
+					<h2>Search</h2>
+					<form class="search" ng-submit="form.submit()" id="app-viewport-tools-search">
+						<fieldset>
+							<legend>Search by service name</legend>
+							<label class="visuallyhidden" for="query">Enter search term</label>
+							<input ng-model="form.search.query" id="query" type="search" size="25" placeholder="Enter service name" value="">
+						</fieldset>
+						<fieldset>
+							<legend>Search by service type</legend>
+							<ol class="questions">
+								<li>
+									<label for="service"></label>
+									<select ng-model="form.search[ 'Support services' ]" id="service">
+										<option value="" selected="">All</option>
+										<option value="General services for victims of crime">General services</option>
+										<option value="Victims of sexual offences">Victims of sexual offences</option>
+										<option value="Victims of domestic violence and family violence">Domestic/family violence victims</option>
+										<option value="Children and young victims of crime">Children and young victims</option>
+										<option value="Families and friends of victims who have died">Families and friends of victims</option>
+										<option value="Victims of crime with a disability">Victims of crime with a disability</option>
+										<option value="Aboriginal and Torres Strait Islander victims of crime">Aboriginal &amp; Torres Strait Islander victims</option>
+										<option value="Victims of mentally ill offenders">Victims of mentally ill offenders</option>
+										<option value="Legal support for victims of crime">Legal support for victims of crime</option>
+									</select>
+								</li>
+							</ol>
+						</fieldset>
+						<fieldset>
+							<legend>Search by service region</legend>
+							<ol class="questions">
+								<li>
+									<label for="region"></label>
+									<select ng-model="form.search.Region" id="region">
+										<option value="" selected="">All</option>
+										<option value="Far North Queensland">Far North Queensland</option>
+										<option value="North Queensland">North Queensland</option>
+										<option value="Central Queensland">Central Queensland</option>
+										<option value="Sunshine Coast">Sunshine Coast</option>
+										<option value="Greater Brisbane">Greater Brisbane</option>
+										<option value="Gold Coast">Gold Coast</option>
+										<option value="South West Queensland">South West Queensland</option>
+									</select>
+								</li>
+							</ol>
+						</fieldset>
+						<ul class="actions">
+							<li><strong><input type="submit" value="Search"></strong></li>
+						</ul>
+					</form>
+				</div>
 
 			</div></div></div><!-- end #asides, .box-sizing, .border -->
 

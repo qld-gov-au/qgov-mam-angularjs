@@ -6,9 +6,11 @@ angular.module( 'qgov.map', [] )
 .constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )
 
 
-.factory( 'qgovMapModel', function() {
+.factory( 'qgovMapModel', [ '$window',
+function(                    $window ) {
 	var markers = [];
 	var areaOfInterest = null;
+	var bounds;
 
 	return {
 		areaOfInterest: function() {
@@ -17,15 +19,39 @@ angular.module( 'qgov.map', [] )
 		markers: function() {
 			return markers;
 		},
+		bounds: function() {
+			return bounds;
+		},
 		setMarkers: function( markerData ) {
 			markers = markerData;
 			areaOfInterest = null;
 		},
 		highlight: function( latlng ) {
 			areaOfInterest = latlng;
+		},
+
+		// center on a given latlong, and zoom to show at least n Markers
+		// setBounds() : include all markers
+		// setBounds( latlong, radius, int ) : show a subset of markers near a given location
+		// assumes markers are sorted by distance from latlong
+		setView: function( latlong, radius, nMarkers ) {
+			nMarkers = nMarkers ? markers.slice( 0, nMarkers ) : markers;
+			nMarkers = $.map( nMarkers, function( data ) {
+				return $window.L.marker( data.latlng, data.options );
+			});
+			var newBounds = new $window.L.featureGroup( nMarkers );
+
+			if ( latlong ) {
+				radius = radius * 1000 || 7500; // km to m (leaflet)
+				newBounds.addLayer( $window.L.circle( latlong, radius ));
+			}
+
+			// update model
+			// bounds = newBounds.getBounds();
+			bounds = newBounds.getBounds();
 		}
 	};
-})
+}])
 
 
 .controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'CENTER', 'MAX_ZOOM',
@@ -80,6 +106,23 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 		}
 	});
 
+
+	// Replacing default values for button accessibility
+	$( '.leaflet-control-zoom-fullscreen' ).html( 'Fullscreen' );
+	$( '.leaflet-control-zoom-out' ).html( 'Zoom out' );
+	$( '.leaflet-control-zoom-in' ).html( 'Zoom in' );
+
+	// Let's make leaflet map js more accessible :) - putting "for" on labels for input buttons within the layers selection area.
+	$( '.leaflet-control-layers-base label' ).each(function() {
+		//for each span within leaflet layer label wrapper find span content and strip spaces
+		var spanText = $.trim( $( 'span', this ).text().replace( /\s+/g, '' ));
+		// check if this name is an id already with $(~~~).generateId(spanText);
+		//set label for attribute and input id
+		var input = $( 'input', this ).generateId( spanText );
+		$( this ).attr( 'for', input.attr( 'id' ));
+	});
+
+
 	// highlight area of interest
 	var circle = $window.L.circle( CENTER, 100, {
 		color: '#f00',
@@ -99,6 +142,7 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 			$location.path( '/' + title );
 		});
 	}
+
 
 	// update markers
 	$scope.$watch( qgovMapModel.markers, function( newMarkers ) {
@@ -122,10 +166,17 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 		if ( markers.length ) {
 			cluster.addLayers( markers );
 			map.addLayer( cluster );
-			// fit to map
-			map.fitBounds( new $window.L.featureGroup( markers ).getBounds() );
 		}
 	});
+
+
+	// display map bounds
+	$scope.$watch( qgovMapModel.bounds, function( newBounds ) {
+		if ( newBounds ) {
+			map.fitBounds( newBounds );
+		}
+	});
+
 
 	// update circle highlight around area of interest
 	$scope.$watch( qgovMapModel.areaOfInterest, function( newLatlng ) {

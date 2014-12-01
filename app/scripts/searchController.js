@@ -99,7 +99,6 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovM
 			} : null;
 		})
 	);
-	qgovMapModel.setView();
 
 	if ( results.geocode ) {
 		qgovMapModel.setView({

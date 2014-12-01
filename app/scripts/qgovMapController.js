@@ -35,6 +35,11 @@ function(                    $window ) {
 		// setBounds( latlong, radius, int ) : show a subset of markers near a given location
 		// assumes markers are sorted by distance from latlong
 		setView: function( latlong, radius, nMarkers ) {
+			if ( markers.length === 0 && ! latlong ) {
+				bounds = undefined;
+				return;
+			}
+
 			nMarkers = nMarkers ? markers.slice( 0, nMarkers ) : markers;
 			nMarkers = $.map( nMarkers, function( data ) {
 				return $window.L.marker( data.latlng, data.options );
@@ -174,6 +179,9 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 	$scope.$watch( qgovMapModel.bounds, function( newBounds ) {
 		if ( newBounds ) {
 			map.fitBounds( newBounds );
+		} else {
+			// show Qld
+			map.setView( CENTER, 4 );
 		}
 	});
 

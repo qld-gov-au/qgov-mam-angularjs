@@ -47,6 +47,11 @@ function(                    $window ) {
 		// setBounds( latlong, radius, int ) : show a subset of markers near a given location
 		// assumes markers are sorted by distance from latlong
 		setView: function( latlong, radius, nMarkers ) {
+			if ( markers.length === 0 && ! latlong ) {
+				bounds = undefined;
+				return;
+			}
+
 			nMarkers = nMarkers ? markers.slice( 0, nMarkers ) : markers;
 			nMarkers = $.map( nMarkers, function( data ) {
 				return $window.L.marker( data.latlng, data.options );
@@ -186,6 +191,9 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 	$scope.$watch( qgovMapModel.bounds, function( newBounds ) {
 		if ( newBounds ) {
 			map.fitBounds( newBounds );
+		} else {
+			// show Qld
+			map.setView( CENTER, 4 );
 		}
 	});
 
@@ -1790,7 +1798,7 @@ function(                          $interpolate ,  $http,   $q ) {
 				});
 			});
 			if ( filter.length ) {
-				where.push( filter );
+				where = where.concat( filter );
 			}
 		}
 
@@ -1937,13 +1945,12 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovM
 
 	qgovMapModel.setMarkers(
 		$.map( results.search.result.records, function( record ) {
-			return {
+			return record.Latitude && record.Longitude ? {
 				latlng: [ parseFloat( record.Latitude ), parseFloat( record.Longitude ) ],
 				options: { title: record.Title || record.Name }
-			};
+			} : null;
 		})
 	);
-	qgovMapModel.setView();
 
 	if ( results.geocode ) {
 		qgovMapModel.setView({

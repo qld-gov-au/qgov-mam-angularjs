@@ -2211,7 +2211,7 @@ function(                          $interpolate ,  $http,   $q ) {
 
 		// dataset UUID format check
 		// http://stackoverflow.com/questions/19989481/how-to-determine-if-a-string-is-a-valid-v4-uuid
-		if ( /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89AB][0-9a-f]{3}-[0-9a-f]{12}$/.test( args.resourceId )) {
+		if ( /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89AB][0-9a-f]{3}-[0-9a-f]{12}$/i.test( args.resourceId )) {
 			from.push( '"' + args.resourceId + '"' );
 		} else {
 			defer.reject( 'Invalid resource ID: ' + args.resourceId );

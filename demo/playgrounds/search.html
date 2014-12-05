@@ -12,8 +12,15 @@
 				<a ng-href="#/{{ result.Name }}">{{ result.Name }}</a>
 			</h3>
 
-			<p class="search-description">{{ result[ 'Playground features'] }}</div>
-			<p class="meta">{{ result.Suburb }} </p>
+			<div class="caption location adr">
+				<span ng-if="result.Address1 &amp;&amp; result.Address2">
+					<span class="extended-address">{{ result.Address1 }}</span><br>
+					<span class="street-address">{{ result.Address2 }}</span><br>
+				</span>
+				<span ng-if="result.Address1 &amp;&amp; ! result.Address2"><span class="street-address">{{ result.Address1 }}</span><br></span>
+				<span ng-if="result.Address2 &amp;&amp; ! result.Address1"><span class="street-address">{{ result.Address2 }}</span><br></span>
+				<span class="locality">{{ result.Suburb }}</span> <span class="region">Qld</span> <span class="postal-code">{{ result.Postcode }}</span>
+			</div>
 		</li>
 	</ol>
 

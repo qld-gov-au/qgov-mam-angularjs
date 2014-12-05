@@ -2,25 +2,48 @@
 	<div id="app-viewport-info">
 		<h2>{{ vm.item.Name }}</h2>
 
-		<div>
-			<span ng-if="vm.item.Address1">{{ vm.item.Address1 }}<br /></span>
-			<span ng-if="vm.item.Address2">{{ vm.item.Address2 }}<br /></span>
-			<span class="locality">{{ vm.item.Suburb }}</span>&nbsp;
-			<span class="region">QLD</span>&nbsp;
-			<span class="postal-code">{{ vm.item.Postcode }}</span>
-		</div>
+		<dl class="grid">
+			<dt>Facilities:</dt>
+			<dd marked="vm.item.Facilities"></dd>
+			
+			<dt>Playground features:</dt>
+			<dd marked="vm.item[ 'Playground features' ]"></dd>
 
-		<dl>
-			<dt>Playground features</dt>
-			<dd>{{ vm.item[ 'Playground features' ] }}</dd>
+			<dt ng-if="vm.item.Weblink">Website:</dt>
+			<dd ng-if="vm.item.Weblink"><a ng-href="{{ vm.item.Weblink }}">{{ vm.item.Weblink }}</a></dd>
 
-			<dt>Contact</dt>
+			<dt>Contact:</dt>
 			<dd>{{ vm.item.Contact }}</dd>
 
-			<dt>Website</dt>
-			<dd><a ng-href="{{ vm.item.Weblink }}">{{ vm.item.Weblink }}</a></dd>
-
+			<dt>Address:</dt>
+			<dd class="location adr">
+				<span ng-if="vm.item.Address1 &amp;&amp; vm.item.Address2">
+					<span class="extended-address">{{ vm.item.Address1 }}</span><br>
+					<span class="street-address">{{ vm.item.Address2 }}</span><br>
+				</span>
+				<span ng-if="vm.item.Address1 &amp;&amp; ! vm.item.Address2"><span class="street-address">{{ vm.item.Address1 }}</span><br></span>
+				<span ng-if="vm.item.Address2 &amp;&amp; ! vm.item.Address1"><span class="street-address">{{ vm.item.Address2 }}</span><br></span>
+				<span class="locality">{{ vm.item.Suburb }}</span> <span class="region">Qld</span> <span class="postal-code">{{ vm.item.Postcode }}</span>
+			</dd>
 		</dl>
+
+		<div class="section image-gallery">
+			<h3>Photos</h3>
+			<ul>
+				<li><a ng-href="//www.qld.gov.au{{ vm.item[ 'Image 1' ] }}.jpg"><img ng-src="//www.qld.gov.au{{ vm.item[ 'Image 1' ] }}.jpg" alt="{{ vm.item[ 'Image 1 description' ] }}"></a></li>
+				<li><a ng-href="//www.qld.gov.au{{ vm.item[ 'Image 2' ] }}.jpg"><img ng-src="//www.qld.gov.au{{ vm.item[ 'Image 2' ] }}.jpg" alt="{{ vm.item[ 'Image 2 description' ] }}"></a></li>
+				<li><a ng-href="//www.qld.gov.au{{ vm.item[ 'Image 3' ] }}.jpg"><img ng-src="//www.qld.gov.au{{ vm.item[ 'Image 3' ] }}.jpg" alt="{{ vm.item[ 'Image 3 description' ] }}"></a></li>
+				<li><a ng-href="//www.qld.gov.au{{ vm.item[ 'Image 4' ] }}.jpg"><img ng-src="//www.qld.gov.au{{ vm.item[ 'Image 4' ] }}.jpg" alt="{{ vm.item[ 'Image 4 description' ] }}"></a></li>
+			</ul>			
+		</div>
+		<script>
+		$( 'a', '.image-gallery' ).butterfly({
+			closeButton: true,
+			closeButtonCorner: 'tr',
+			galleryContainers: '.image-gallery',
+			closeButtonImage: qg.swe.paths.assets + 'images/skin/button-close.png'
+		});
+		</script>
 
 	</div>
 </div>

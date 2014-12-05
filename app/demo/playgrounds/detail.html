@@ -30,10 +30,11 @@
 		<div class="section image-gallery">
 			<h3>Photos</h3>
 			<ul>
-				<li><a ng-href="//www.qld.gov.au{{ vm.item[ 'Image 1' ] }}.jpg"><img ng-src="//www.qld.gov.au{{ vm.item[ 'Image 1' ] }}.jpg" alt="{{ vm.item[ 'Image 1 description' ] }}"></a></li>
-				<li><a ng-href="//www.qld.gov.au{{ vm.item[ 'Image 2' ] }}.jpg"><img ng-src="//www.qld.gov.au{{ vm.item[ 'Image 2' ] }}.jpg" alt="{{ vm.item[ 'Image 2 description' ] }}"></a></li>
-				<li><a ng-href="//www.qld.gov.au{{ vm.item[ 'Image 3' ] }}.jpg"><img ng-src="//www.qld.gov.au{{ vm.item[ 'Image 3' ] }}.jpg" alt="{{ vm.item[ 'Image 3 description' ] }}"></a></li>
-				<li><a ng-href="//www.qld.gov.au{{ vm.item[ 'Image 4' ] }}.jpg"><img ng-src="//www.qld.gov.au{{ vm.item[ 'Image 4' ] }}.jpg" alt="{{ vm.item[ 'Image 4 description' ] }}"></a></li>
+				<li ng-repeat="i in [ 1, 2, 3, 4 ]">
+					<a ng-href="//www.qld.gov.au{{ vm.item[ 'Image ' + i ] }}.jpg">
+						<img ng-src="//www.qld.gov.au{{ vm.item[ 'Image ' + i ] }}.jpg" alt="{{ vm.item[ 'Image ' + i + ' description' ] }}">
+					</a>
+				</li>
 			</ul>			
 		</div>
 		<script>

@@ -22,7 +22,6 @@ function(  markedProvider ) {
 // global MAM routing
 .config([ '$stateProvider',
 function(  $stateProvider ) {
-	// search results
 	$stateProvider.state( 'mam', {
 		abstract: true,
 		url: '/',
@@ -55,6 +54,7 @@ function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
 	});
 	$rootScope.$on( '$stateChangeError', function() {
 		console.log( '$stateChangeError' );
+		// TODO stop angular from handling the #! URL used by lightbox
 		// $( document ).status( 'show', {
 		// 	lightbox: true,
 		// 	status: 'fail',
@@ -64,5 +64,5 @@ function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
 	});
 
 	// initial state
-	$state.go( $location.search().title ? 'mam.detail' : 'mam.search', $location.search() );
+	// $state.go( $location.search().title ? 'mam.detail' : 'mam.search', $location.search() );
 }]);

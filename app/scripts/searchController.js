@@ -1,47 +1,35 @@
 /*global $*/
-angular.module( 'mam.searchView', [ 'ngRoute', 'esri-geocoder', 'qgovMam.config' ])
+angular.module( 'mam.searchView', [ 'esri-geocoder', 'qgovMam.config' ])
 
 
-.config([ '$routeProvider',
-function(  $routeProvider ) {
-// search results
-	$routeProvider.when( '/', {
-		// old MAM detail view URLs: ?title=<title>
-		redirectTo: function() {
-			// https://github.com/angular/angular.js/issues/7239
-			if ( /title=[^&]/.test( window.location.search )) {
-				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
-
-			} else if ( window.location.search.length > 0 ) {
-				// put search params into fragment
-				var search = window.location.search;
-				window.location.href = window.location.href.replace( /\?[^#]*/, '' );
-				return '/' + search;
-			}
-		},
+.config([ '$stateProvider',
+function(  $stateProvider ) {
+	// search results
+	$stateProvider.state( 'mam.search', {
+		url: '/?query&location&distance&page',
 		controller: 'SearchController',
 		controllerAs: 'vm',
 		templateUrl: 'search.html',
 		resolve: {
-			pageNumber: [ '$location', function( $location ) {
-				return parseInt( $location.search().page, 10 ) || 1;
+			pageNumber: [ '$stateParams', function( $stateParams ) {
+				return parseInt( $stateParams.page, 10 ) || 1;
 			}],
-			results: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$location',
-			function(    geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $location ) {
+			results: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
+			function(    geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
 				var search = $location.search();
 				var ckanResponse, geocodeResponse;
 
 				// reserved search params: fulltext, location, distance
 				var filter = angular.copy( search );
-				delete filter.query;
-				delete filter.location;
-				delete filter.distance;
-				delete filter.page; // pagination
+				// remove stateParams from custom filters
+				$.each( $stateParams, function( key ) {
+					delete filter[ key ];
+				});
 
 				// geo search
 				if ( search.location ) {
 					geocodeResponse = geocoder.findAddressCandidates({
-						singleLine: search.location,
+						singleLine: $stateParams.location,
 						countryCode: 'AU',
 						maxLocations: 1
 					});
@@ -49,10 +37,10 @@ function(  $routeProvider ) {
 					ckanResponse = geocodeResponse.then(function( geoResponse ) {
 						return ckan.datastoreSearchSQL({
 							resourceId: SOURCE.resourceId,
-							fullText: search.fullText,
+							fullText: $stateParams.query,
 							latitude: geoResponse.candidates[ 0 ].location.y,
 							longitude: geoResponse.candidates[ 0 ].location.x,
-							distance: search.distance || DEFAULT_GEO_RADIUS,
+							distance: $stateParams.distance || DEFAULT_GEO_RADIUS,
 							filter: filter
 						});
 					});
@@ -67,7 +55,7 @@ function(  $routeProvider ) {
 
 				ckanResponse = ckan.datastoreSearchSQL({
 					resourceId: SOURCE.resourceId,
-					fullText: search.fullText,
+					fullText: $stateParams.query,
 					filter: filter
 				});
 				return $q.all([ ckanResponse ]).then(function( results ) {
@@ -81,8 +69,8 @@ function(  $routeProvider ) {
 }])
 
 
-.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'qgovMapModel', 'pageNumber', 'results',
-function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovMapModel,   pageNumber,   results ) {
+.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'qgovMapModel', '$location', '$state', '$stateParams', 'pageNumber', 'results',
+function(                           RESULTS_PER_PAGE ,  PAGES_AVAILABLE ,  qgovMapModel ,  $location ,  $state ,  $stateParams ,  pageNumber ,  results ) {
 
 	// view model
 	var vm = this;
@@ -127,10 +115,21 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovM
 	// http://www.qld.gov.au/web/cue/module5/checkpoints/checkpoint15/
 	vm.pagination = {
 		current: pageNumber,
+		limit: RESULTS_PER_PAGE,
 		previous: pageNumber > 1 ? pageNumber - 1 : null,
 		next: pageNumber < lastPage ? pageNumber + 1 : null,
-		limit: RESULTS_PER_PAGE,
-		pages: []
+		pages: [],
+		pageUrl: function( n ) {
+			// merge state, query string (custom params) and new page number
+			var query = angular.extend( {}, $stateParams, $location.search(), { page: n } );
+			// remove undefined values
+			query = $.each( query, function( key, value ) {
+				if ( ! angular.isDefined( value )) {
+					delete query[ key ];
+				}
+			});
+			return '?' + $.param( query );
+		}
 	};
 
 	for ( var i = minPage; i <= maxPage; i++ ) {
@@ -141,8 +140,8 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   qgovM
 
 
 // search form
-.controller( 'SearchFormController', [ 'geocoder', '$location',
-function(                               geocoder ,  $location ) {
+.controller( 'SearchFormController', [ 'geocoder', '$location', '$state',
+function(                               geocoder ,  $location ,  $state ) {
 
 	var form = this;
 
@@ -151,8 +150,7 @@ function(                               geocoder ,  $location ) {
 
 	// apply filter to search results
 	form.submit = function() {
-		$location.path( '/' );
-		$location.search( form.search );
+		$state.go( 'mam.search', form.search, { reload: true });
 	};
 
 }]);

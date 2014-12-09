@@ -1,5 +1,5 @@
 /*global $*/
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'qgov.map', 'hc.marked', 'mam.errorView', 'mam.searchView', 'mam.detailView' ])
+angular.module( 'qgovMam', [ 'ui.router', 'qgov', 'ckanApi', 'qgov.map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
 
 // markdown config
 .config([ 'markedProvider',
@@ -13,30 +13,59 @@ function(  markedProvider ) {
 }])
 
 
-// routing
-.config([ '$routeProvider',
-function(  $routeProvider ) {
-	// default routes
-	$routeProvider
-	.otherwise({ redirectTo : '/' });
+// no hashbangs
+.config([ '$locationProvider', function( $locationProvider ) {
+	$locationProvider.html5Mode( true );
 }])
 
 
-.run([   '$rootScope', '$location',
-function( $rootScope,   $location ) {
-	// $rootScope.$on( '$routeChangeStart', function() {
-	// 	$rootScope.isLoading = true;
-	// 	$rootScope.loadingPercent = 10;
-	// });
+// global MAM routing
+.config([ '$stateProvider',
+function(  $stateProvider ) {
+	// search results
+	$stateProvider.state( 'mam', {
+		abstract: true,
+		url: '',
+		template: '<ui-view/>'
+	});
+}])
 
-	$rootScope.$on( '$routeChangeSuccess', function() {
+
+// URL/route/state changes
+.run([   '$rootScope', '$state', '$location', '$anchorScroll',
+function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
+	$rootScope.$on( '$stateChangeStart', function() {
+		// https://github.com/angular-ui/ui-router/issues/202
+		this.locationSearch = $location.search();
+	});
+
+	$rootScope.$on( '$stateChangeSuccess', function() {
 		// $rootScope.isLoading = false;
 		// $rootScope.loadingPercent = 100;
+		$location.search( this.locationSearch );
 		$( '#article' ).trigger( 'x-height-change' );
+		$anchorScroll( 0 );
 	});
 
-	$rootScope.$on( '$routeChangeError', function() {
-		// console.log( '$routeChangeError' );
-		$location.path( '/error' );
+	$rootScope.$on( '$stateNotFound', function() {
+		console.log( '$stateNotFound' );
+		// $( document ).status( 'show', {
+		// 	lightbox: true,
+		// 	status: 'fail',
+		// 	title: 'Not found',
+		// 	content: '<p>State not found.</p>'
+		// });
 	});
+	$rootScope.$on( '$stateChangeError', function() {
+		console.log( '$stateChangeError' );
+		// $( document ).status( 'show', {
+		// 	lightbox: true,
+		// 	status: 'fail',
+		// 	title: 'Routing error',
+		// 	content: '<p>Routing error.</p>'
+		// });
+	});
+
+	// initial state
+	$state.go( $location.search().title ? 'mam.detail' : 'mam.search', $location.search() );
 }]);

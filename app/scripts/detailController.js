@@ -1,20 +1,17 @@
 /*global $*/
-angular.module( 'mam.detailView', [ 'ngRoute', 'qgovMam.config' ] )
+angular.module( 'mam.detailView', [ 'qgovMam.config' ] )
 
 
-.config([ '$routeProvider', 'SOURCE',
-function(  $routeProvider,   SOURCE ) {
-	$routeProvider.when( '/:title', {
-		// tidy up old MAM URLs
-		redirectTo: function() {
-			window.location.href = window.location.href.replace( /\?[^#]*/, '' );
-		},
+.config([ '$stateProvider', 'SOURCE',
+function(  $stateProvider,   SOURCE ) {
+	$stateProvider.state( 'mam.detail', {
+		url: '/?title',
 		controller: 'DetailController',
 		controllerAs: 'vm',
 		templateUrl: 'detail.html',
 		resolve: {
-			title: [ '$route', function( $route ) {
-				return $route.current.params.title;
+			title: [ '$stateParams', function( $stateParams ) {
+				return $stateParams.title;
 			}],
 			json: [ 'ckan', function( ckan ) {
 				return ckan.datastoreSearchSQL({ resourceId: SOURCE.resourceId });

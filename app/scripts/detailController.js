@@ -5,7 +5,7 @@ angular.module( 'mam.detailView', [ 'qgovMam.config' ] )
 .config([ '$stateProvider', 'SOURCE',
 function(  $stateProvider,   SOURCE ) {
 	$stateProvider.state( 'mam.detail', {
-		url: '/?title',
+		url: '?title',
 		controller: 'DetailController',
 		controllerAs: 'vm',
 		templateUrl: 'detail.html',

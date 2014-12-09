@@ -25,7 +25,7 @@ function(  $stateProvider ) {
 	// search results
 	$stateProvider.state( 'mam', {
 		abstract: true,
-		url: '',
+		url: '/',
 		template: '<ui-view/>'
 	});
 }])
@@ -34,15 +34,12 @@ function(  $stateProvider ) {
 // URL/route/state changes
 .run([   '$rootScope', '$state', '$location', '$anchorScroll',
 function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
-	$rootScope.$on( '$stateChangeStart', function() {
-		// https://github.com/angular-ui/ui-router/issues/202
-		this.locationSearch = $location.search();
-	});
+	// $rootScope.$on( '$stateChangeStart', function() {
+	// });
 
 	$rootScope.$on( '$stateChangeSuccess', function() {
 		// $rootScope.isLoading = false;
 		// $rootScope.loadingPercent = 100;
-		$location.search( this.locationSearch );
 		$( '#article' ).trigger( 'x-height-change' );
 		$anchorScroll( 0 );
 	});

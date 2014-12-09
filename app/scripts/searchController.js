@@ -6,7 +6,7 @@ angular.module( 'mam.searchView', [ 'esri-geocoder', 'qgovMam.config' ])
 function(  $stateProvider ) {
 	// search results
 	$stateProvider.state( 'mam.search', {
-		url: '/?query&location&distance&page',
+		url: '?query&location&distance&page',
 		controller: 'SearchController',
 		controllerAs: 'vm',
 		templateUrl: 'search.html',

@@ -147,10 +147,12 @@ function(                               geocoder ,  $location ,  $state ) {
 
 	// read initial params from URL
 	form.search = $location.search();
+	// remove page number
+	delete form.search.page;
 
 	// apply filter to search results
 	form.submit = function() {
-		$state.go( 'mam.search', form.search, { reload: true });
+		$state.go( 'mam.search', form.search, { reload: true, inherit: false });
 	};
 
 }]);

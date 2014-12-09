@@ -3,6 +3,7 @@
 <head prefix="og: http://ogp.me/ns#">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<title>{{ swe.pageTitle }} | {{ swe.franchiseName }} | Queensland Government</title>
+	<base href="/demo/science/" />
 
 <!--#set var="franchise" value="FRANCHISE_ID"-->
 <!--#set var="title" value="TITLE"-->
@@ -12,7 +13,6 @@
 <!--#include virtual="/assets/includes/global/head-assets-scripts.html"-->
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular.min.js"></script>
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-animate.min.js"></script>
-<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-route.min.js"></script>
 
 	<meta name="description" content="DESCRIPTION" />
 	<meta name="keywords" content="KEYWORDS" />
@@ -63,7 +63,7 @@
 
 
 					<div data-ng-controller="qgovMapController"><div id="map_canvas"></div></div>
-					<div data-ng-view data-autoscroll></div>
+					<div data-ui-view data-autoscroll="false"></div>
 
 
 				</div></div></div><!-- end .article, .box-sizing, .border -->
@@ -148,72 +148,72 @@
 								<p>Choose a sector</p>
 								<ul>
 									<li>
-										<a href="#/?Sector=Biotechnology" title="Biotechnology"><i class="fa fa-flask"></i>
+										<a href="?Sector=Biotechnology" title="Biotechnology"><i class="fa fa-flask"></i>
 											<span>Biotechnology</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Construction" title="Construction"><i class="fa fa-wrench"></i>
+										<a href="?Sector=Construction" title="Construction"><i class="fa fa-wrench"></i>
 											<span>Construction</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Food and agriculture" title="Food and agriculture"><i class="fa fa-cutlery"></i>
+										<a href="?Sector=Food and agriculture" title="Food and agriculture"><i class="fa fa-cutlery"></i>
 											<span>Food and agriculture</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Health and medical" title="Health and medical"><i class="fa fa-medkit"></i>
+										<a href="?Sector=Health and medical" title="Health and medical"><i class="fa fa-medkit"></i>
 											<span>Health and medical</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=ICT and multimedia" title="ICT and multimedia"><i class="fa fa-laptop"></i>
+										<a href="?Sector=ICT and multimedia" title="ICT and multimedia"><i class="fa fa-laptop"></i>
 											<span>ICT and multimedia</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Manufacturing and design" title="Manufacturing and design"><i class="fa fa-cogs"></i>
+										<a href="?Sector=Manufacturing and design" title="Manufacturing and design"><i class="fa fa-cogs"></i>
 											<span>Manufacturing and design</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Mining/resources and energy" title="Mining/resources and energy"><i class="fa fa-bolt"></i>
+										<a href="?Sector=Mining/resources and energy" title="Mining/resources and energy"><i class="fa fa-bolt"></i>
 											<span>Mining/resources and energy</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Environment and nature" title="Environment and nature"><i class="fa fa-leaf"></i>
+										<a href="?Sector=Environment and nature" title="Environment and nature"><i class="fa fa-leaf"></i>
 											<span>Environment and nature</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Defence, aviation and space" title="Defence, aviation and space"><i class="fa fa-fighter-jet"></i>
+										<a href="?Sector=Defence, aviation and space" title="Defence, aviation and space"><i class="fa fa-fighter-jet"></i>
 											<span>Defence, aviation and space</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Tourism" title="Tourism"><i class="fa fa-suitcase"></i>
+										<a href="?Sector=Tourism" title="Tourism"><i class="fa fa-suitcase"></i>
 											<span>Tourism</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Commercialisation" title="Commercialisation"><i class="fa fa-dollar"></i>
+										<a href="?Sector=Commercialisation" title="Commercialisation"><i class="fa fa-dollar"></i>
 											<span>Commercialisation</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Research hospitals" title="Research hospitals"><i class="fa fa-h-square"></i>
+										<a href="?Sector=Research hospitals" title="Research hospitals"><i class="fa fa-h-square"></i>
 											<span>Research hospitals</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Social sciences" title="Social sciences"><i class="fa fa-group"></i>
+										<a href="?Sector=Social sciences" title="Social sciences"><i class="fa fa-group"></i>
 											<span>Social sciences</span>
 										</a>
 									</li>
 									<li>
-										<a href="#/?Sector=Tropical" title="Tropical"><i class="fa fa-sun-o"></i>
+										<a href="?Sector=Tropical" title="Tropical"><i class="fa fa-sun-o"></i>
 											<span>Tropical</span>
 										</a>
 									</li>

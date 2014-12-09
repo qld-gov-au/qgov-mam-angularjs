@@ -3,6 +3,7 @@
 <head prefix="og: http://ogp.me/ns#">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<title>{{ swe.pageTitle }} | {{ swe.franchiseName }} | Queensland Government</title>
+	<base href="/demo/victims/" />
 
 <!--#set var="franchise" value="FRANCHISE_ID"-->
 <!--#set var="title" value="TITLE"-->
@@ -12,7 +13,6 @@
 <!--#include virtual="/assets/includes/global/head-assets-scripts.html"-->
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular.min.js"></script>
 <script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-animate.min.js"></script>
-<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-route.min.js"></script>
 
 	<meta name="description" content="DESCRIPTION" />
 	<meta name="keywords" content="KEYWORDS" />
@@ -63,7 +63,7 @@
 
 
 					<div data-ng-controller="qgovMapController"><div id="map_canvas"></div></div>
-					<div data-ng-view data-autoscroll></div>
+					<div data-ui-view data-autoscroll="false"></div>
 
 
 				</div></div></div><!-- end .article, .box-sizing, .border -->

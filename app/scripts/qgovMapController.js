@@ -62,8 +62,8 @@ function(                    $window ,  QLD_POLY_COORDS ) {
 }])
 
 
-.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'CENTER', 'MAX_ZOOM', 'QLD_POLY_COORDS',
-function(                            qgovMapModel ,  $window ,  $scope ,  $location ,  CENTER ,  MAX_ZOOM ,  QLD_POLY_COORDS ) {
+.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$state', 'CENTER', 'MAX_ZOOM', 'QLD_POLY_COORDS',
+function(                            qgovMapModel ,  $window ,  $scope ,  $state ,  CENTER ,  MAX_ZOOM ,  QLD_POLY_COORDS ) {
 
 	// leaflet config
 	$window.L.Icon.Default.imagePath = $window.qg.swe.paths.assets + 'images/skin/map-marker';
@@ -153,9 +153,9 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 	function markerClicked( title ) {
 		// get back in scope
 		// https://groups.google.com/forum/#!topic/angular/nFbtADyEHg8
-		$scope.$apply( function() {
+		$scope.$apply(function() {
 			// navigate to result
-			$location.path( '/' + title );
+			$state.go( 'mam.detail', { title: title }, { inherit: false });
 		});
 	}
 

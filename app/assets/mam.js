@@ -4305,8 +4305,8 @@ function(                    $window ,  QLD_POLY_COORDS ) {
 }])
 
 
-.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$location', 'CENTER', 'MAX_ZOOM', 'QLD_POLY_COORDS',
-function(                            qgovMapModel ,  $window ,  $scope ,  $location ,  CENTER ,  MAX_ZOOM ,  QLD_POLY_COORDS ) {
+.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$state', 'CENTER', 'MAX_ZOOM', 'QLD_POLY_COORDS',
+function(                            qgovMapModel ,  $window ,  $scope ,  $state ,  CENTER ,  MAX_ZOOM ,  QLD_POLY_COORDS ) {
 
 	// leaflet config
 	$window.L.Icon.Default.imagePath = $window.qg.swe.paths.assets + 'images/skin/map-marker';
@@ -4396,9 +4396,9 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $locat
 	function markerClicked( title ) {
 		// get back in scope
 		// https://groups.google.com/forum/#!topic/angular/nFbtADyEHg8
-		$scope.$apply( function() {
+		$scope.$apply(function() {
 			// navigate to result
-			$location.path( '/' + title );
+			$state.go( 'mam.detail', { title: title }, { inherit: false });
 		});
 	}
 
@@ -6515,16 +6515,7 @@ function(            datastoreSearchSQL ) {
 		'datastoreSearchSQL': datastoreSearchSQL
 	});
 }])
-;;angular.module( 'mam.errorView', [ 'ngRoute' ])
-
-
-.config([ '$routeProvider',
-function(  $routeProvider ) {
-	$routeProvider.when( '/error', {
-		templateUrl: 'error.html'
-	});
-}]);
-;/*global $*/
+;;/*global $*/
 angular.module( 'mam.searchView', [ 'esri-geocoder', 'qgovMam.config' ])
 
 
@@ -6532,7 +6523,7 @@ angular.module( 'mam.searchView', [ 'esri-geocoder', 'qgovMam.config' ])
 function(  $stateProvider ) {
 	// search results
 	$stateProvider.state( 'mam.search', {
-		url: '/?query&location&distance&page',
+		url: '?query&location&distance&page',
 		controller: 'SearchController',
 		controllerAs: 'vm',
 		templateUrl: 'search.html',
@@ -6687,7 +6678,7 @@ angular.module( 'mam.detailView', [ 'qgovMam.config' ] )
 .config([ '$stateProvider', 'SOURCE',
 function(  $stateProvider,   SOURCE ) {
 	$stateProvider.state( 'mam.detail', {
-		url: '/?title',
+		url: '?title',
 		controller: 'DetailController',
 		controllerAs: 'vm',
 		templateUrl: 'detail.html',
@@ -6780,10 +6771,9 @@ function(  markedProvider ) {
 // global MAM routing
 .config([ '$stateProvider',
 function(  $stateProvider ) {
-	// search results
 	$stateProvider.state( 'mam', {
 		abstract: true,
-		url: '',
+		url: '/',
 		template: '<ui-view/>'
 	});
 }])
@@ -6792,15 +6782,12 @@ function(  $stateProvider ) {
 // URL/route/state changes
 .run([   '$rootScope', '$state', '$location', '$anchorScroll',
 function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
-	$rootScope.$on( '$stateChangeStart', function() {
-		// https://github.com/angular-ui/ui-router/issues/202
-		this.locationSearch = $location.search();
-	});
+	// $rootScope.$on( '$stateChangeStart', function() {
+	// });
 
 	$rootScope.$on( '$stateChangeSuccess', function() {
 		// $rootScope.isLoading = false;
 		// $rootScope.loadingPercent = 100;
-		$location.search( this.locationSearch );
 		$( '#article' ).trigger( 'x-height-change' );
 		$anchorScroll( 0 );
 	});
@@ -6816,6 +6803,7 @@ function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
 	});
 	$rootScope.$on( '$stateChangeError', function() {
 		console.log( '$stateChangeError' );
+		// TODO stop angular from handling the #! URL used by lightbox
 		// $( document ).status( 'show', {
 		// 	lightbox: true,
 		// 	status: 'fail',
@@ -6825,5 +6813,5 @@ function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
 	});
 
 	// initial state
-	$state.go( $location.search().title ? 'mam.detail' : 'mam.search', $location.search() );
+	// $state.go( $location.search().title ? 'mam.detail' : 'mam.search', $location.search() );
 }]);

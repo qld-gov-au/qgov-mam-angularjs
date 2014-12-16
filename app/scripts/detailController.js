@@ -1,4 +1,4 @@
-/*global $*/
+/*global $,qg*/
 angular.module( 'mam.detailView', [ 'qgovMam.config' ] )
 
 
@@ -21,8 +21,8 @@ function(  $stateProvider,   SOURCE ) {
 }])
 
 
-.controller( 'DetailController', [ 'title', 'qgovMapModel', 'json',
-function(                           title,   qgovMapModel,   json ) {
+.controller( 'DetailController', [ 'title', 'qgovMapModel', 'json', '$scope', '$timeout',
+function(                           title,   qgovMapModel,   json ,  $scope ,  $timeout ) {
 
 	// view model
 	var vm = this;
@@ -54,4 +54,16 @@ function(                           title,   qgovMapModel,   json ) {
 		qgovMapModel.highlightState();
 	}
 
+
+	// setup image galleries
+	$scope.$on( '$viewContentLoaded', function() {
+		$timeout(function() {
+			$( 'a', '.image-gallery' ).butterfly({
+				closeButton: true,
+				closeButtonCorner: 'tr',
+				galleryContainers: '.image-gallery',
+				closeButtonImage: qg.swe.paths.assets + 'images/skin/button-close.png'
+			});
+		});
+	});
 }]);

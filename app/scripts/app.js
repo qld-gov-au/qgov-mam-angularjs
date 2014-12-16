@@ -13,15 +13,20 @@ function(  markedProvider ) {
 }])
 
 
-// no hashbangs
-.config([ '$locationProvider', function( $locationProvider ) {
+.config([ '$locationProvider', '$urlRouterProvider', '$stateProvider',
+function(  $locationProvider ,  $urlRouterProvider ,  $stateProvider ) {
+	// no hashbangs
 	$locationProvider.html5Mode( true );
-}])
 
+	// URL handling
+	$urlRouterProvider.rule(function( $injector, $location ) {
+		// ignore hash changes (default browser/SWE behaviour)
+		if ( $location.hash() ) {
+			return true;
+		}
+	});
 
-// global MAM routing
-.config([ '$stateProvider',
-function(  $stateProvider ) {
+	// main routing
 	$stateProvider.state( 'mam', {
 		abstract: true,
 		url: '/',
@@ -33,8 +38,17 @@ function(  $stateProvider ) {
 // URL/route/state changes
 .run([   '$rootScope', '$state', '$location', '$anchorScroll',
 function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
-	// $rootScope.$on( '$stateChangeStart', function() {
-	// });
+	$rootScope.$on( '$stateChangeStart', function( event, toState, toParams, fromState ) {
+		// check for greedy search start
+		if ( toState.name === 'mam.search' && $location.search().title ) {
+			// detail state, not search
+			event.preventDefault();
+			if ( fromState.name !== 'mam.detail' ) {
+				// view state please
+				$state.go( 'mam.detail', $location.search() );
+			}
+		}
+	});
 
 	$rootScope.$on( '$stateChangeSuccess', function() {
 		// $rootScope.isLoading = false;
@@ -45,24 +59,8 @@ function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
 
 	$rootScope.$on( '$stateNotFound', function() {
 		console.log( '$stateNotFound' );
-		// $( document ).status( 'show', {
-		// 	lightbox: true,
-		// 	status: 'fail',
-		// 	title: 'Not found',
-		// 	content: '<p>State not found.</p>'
-		// });
 	});
-	$rootScope.$on( '$stateChangeError', function() {
-		console.log( '$stateChangeError' );
-		// TODO stop angular from handling the #! URL used by lightbox
-		// $( document ).status( 'show', {
-		// 	lightbox: true,
-		// 	status: 'fail',
-		// 	title: 'Routing error',
-		// 	content: '<p>Routing error.</p>'
-		// });
+	$rootScope.$on( '$stateChangeError', function( event, toState, toParams, fromState, fromParams, error ) {
+		console.log( '$stateChangeError', error );
 	});
-
-	// initial state
-	// $state.go( $location.search().title ? 'mam.detail' : 'mam.search', $location.search() );
 }]);

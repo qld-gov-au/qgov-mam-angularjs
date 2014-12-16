@@ -6,7 +6,7 @@ angular.module( 'mam.searchView', [ 'esri-geocoder', 'qgovMam.config' ])
 function(  $stateProvider ) {
 	// search results
 	$stateProvider.state( 'mam.search', {
-		url: '?query&location&distance&page',
+		url: '?query&location&distance&page&title', // need &title to trigger route changes in history
 		controller: 'SearchController',
 		controllerAs: 'vm',
 		templateUrl: 'search.html',

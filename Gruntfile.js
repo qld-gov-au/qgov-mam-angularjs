@@ -2,6 +2,9 @@ module.exports = function(grunt) {
 
   require('matchdep').filterDev('grunt-*').forEach(grunt.loadNpmTasks);
 
+  var pkg = grunt.file.readJSON( 'package.json' );
+  var repoName = pkg.repository.url.replace( /^.*?([^\/]+)\.git/, '$1' );
+
   grunt.initConfig({
     shell: {
       options: {
@@ -216,8 +219,11 @@ module.exports = function(grunt) {
             return grunt.file.read( 'app/assets/includes/global/' + regexMatches[ 0 ] );
           }
         }, {
+          from: 'base href="/demo/',
+          to: 'base href="/' + repoName + '/demo/'
+        }, {
           from: '/assets/mam.js',
-          to: '../../app/assets/mam.js'
+          to: '/' + repoName + '/app/assets/mam.js'
         }]
       }
     }

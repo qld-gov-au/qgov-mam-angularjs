@@ -1,4 +1,4 @@
-/*global $ */
+/*global $, fullScreenApi */
 angular.module( 'qgov.map', [] )
 
 // map details
@@ -156,6 +156,8 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $state
 		$scope.$apply(function() {
 			// navigate to result
 			$state.go( 'mam.detail', { title: title }, { inherit: false });
+			// exit fullscreen (if it was active)
+			fullScreenApi.cancelFullScreen();
 		});
 	}
 

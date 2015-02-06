@@ -6452,6 +6452,11 @@ function(                          $interpolate ,  $http,   $q ) {
 			return defer.promise;
 		}
 
+		// hardcode data.qld.gov.au (production) unless staging is specified
+		if ( args.ckanServer !== 'staging.data.qld.gov.au' ) {
+			args.ckanServer = 'data.qld.gov.au';
+		}
+
 		// full text searching
 		if ( args.fullText ) {
 			from.push( 'plainto_tsquery( \'english\', \'' + args.fullText + '\' ) query' );
@@ -6494,7 +6499,7 @@ function(                          $interpolate ,  $http,   $q ) {
 			callback: 'JSON_CALLBACK'
 		});
 
-		$http.jsonp( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
+		$http.jsonp( 'https://' + args.ckanServer + '/api/action/datastore_search_sql', {
 			params: params,
 			cache: true
 		})
@@ -6556,6 +6561,7 @@ function(  $stateProvider ) {
 
 					ckanResponse = geocodeResponse.then(function( geoResponse ) {
 						return ckan.datastoreSearchSQL({
+							ckanServer: SOURCE.server,
 							resourceId: SOURCE.resourceId,
 							fullText: $stateParams.query,
 							latitude: geoResponse.candidates[ 0 ].location.y,
@@ -6574,6 +6580,7 @@ function(  $stateProvider ) {
 				}
 
 				ckanResponse = ckan.datastoreSearchSQL({
+					ckanServer: SOURCE.server,
 					resourceId: SOURCE.resourceId,
 					fullText: $stateParams.query,
 					filter: filter
@@ -6692,7 +6699,10 @@ function(  $stateProvider,   SOURCE ) {
 				return $stateParams.title;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.datastoreSearchSQL({ resourceId: SOURCE.resourceId });
+				return ckan.datastoreSearchSQL({
+					ckanServer: SOURCE.server,
+					resourceId: SOURCE.resourceId
+				});
 			}]
 		}
 	});

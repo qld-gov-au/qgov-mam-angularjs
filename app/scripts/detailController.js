@@ -14,7 +14,10 @@ function(  $stateProvider,   SOURCE ) {
 				return $stateParams.title;
 			}],
 			json: [ 'ckan', function( ckan ) {
-				return ckan.datastoreSearchSQL({ resourceId: SOURCE.resourceId });
+				return ckan.datastoreSearchSQL({
+					ckanServer: SOURCE.server,
+					resourceId: SOURCE.resourceId
+				});
 			}]
 		}
 	});

@@ -25,6 +25,11 @@ function(                          $interpolate ,  $http,   $q ) {
 			return defer.promise;
 		}
 
+		// hardcode data.qld.gov.au (production) unless staging is specified
+		if ( args.ckanServer !== 'staging.data.qld.gov.au' ) {
+			args.ckanServer = 'data.qld.gov.au';
+		}
+
 		// full text searching
 		if ( args.fullText ) {
 			from.push( 'plainto_tsquery( \'english\', \'' + args.fullText + '\' ) query' );
@@ -67,7 +72,7 @@ function(                          $interpolate ,  $http,   $q ) {
 			callback: 'JSON_CALLBACK'
 		});
 
-		$http.jsonp( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
+		$http.jsonp( 'https://' + args.ckanServer + '/api/action/datastore_search_sql', {
 			params: params,
 			cache: true
 		})

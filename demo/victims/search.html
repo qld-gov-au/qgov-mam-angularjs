@@ -12,15 +12,9 @@
 				<a ui-sref="mam.detail({ title: result.Name })" ui-sref-opts="{ inherit: false }">{{ result.Name }}</a>
 			</h3>
 
-			<div class="caption location adr">
-				<span ng-if="result.Address1 &amp;&amp; result.Address2">
-					<span class="extended-address">{{ result.Address1 }}</span><br>
-					<span class="street-address">{{ result.Address2 }}</span><br>
-				</span>
-				<span ng-if="result.Address1 &amp;&amp; ! result.Address2"><span class="street-address">{{ result.Address1 }}</span><br></span>
-				<span ng-if="result.Address2 &amp;&amp; ! result.Address1"><span class="street-address">{{ result.Address2 }}</span><br></span>
-				<span class="locality">{{ result.Suburb }}</span> <span class="region">Qld</span> <span class="postal-code">{{ result.Postcode }}</span>
-			</div>
+			<p><strong>{{ result[ "Statewide service" ] }}</strong></p>
+			<p class="search-description">{{ result.Description }}</p>
+			<p class="meta">{{ result[ "Support services" ] }}</p>
 		</li>
 	</ol>
 

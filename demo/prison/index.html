@@ -3,6 +3,7 @@
 <head prefix="og: http://ogp.me/ns#">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<title>{{ swe.pageTitle }} | {{ swe.franchiseName }} | Queensland Government</title>
+	<base href="/qgov-mam-angularjs/demo/prison/" />
 
 <!--#set var="franchise" value="FRANCHISE_ID"-->
 <!--#set var="title" value="TITLE"-->
@@ -32,16 +33,15 @@
 	<script type="text/javascript" src="https://static.qgov.net.au/assets/v2/script/ie-layout.js"></script>
 	<![endif]-->
 
-<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular.min.js"></script>
-<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-animate.min.js"></script>
-<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-route.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.3.12/angular.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.3.12/angular-animate.min.js"></script>
 
 	<meta name="description" content="DESCRIPTION" />
 	<meta name="keywords" content="KEYWORDS" />
 
 	<link rel="schema.DCTERMS" href="http://purl.org/dc/terms/" />
 	<link rel="schema.AGLSTERMS" href="http://www.agls.gov.au/agls/terms/" />
-	
+
 	<meta name="DCTERMS.creator" scheme="AGLSTERMS.GOLD" content="c=AU; o=The State of Queensland; ou=DEPARTMENT NAME; ou=UNIT NAME" />
 	<meta name="DCTERMS.publisher" scheme="AGLSTERMS.AglsAgent" content="corporateName=The State of Queensland; jurisdiction=Queensland" />
 	<meta name="DCTERMS.created" content="YYYY-MM-DD" />
@@ -110,7 +110,7 @@
 
 	</div></div></div></div>
 <!-- endnoindex -->
- 
+
 
 	<div id="page-container"><div class="max-width">
 		<div id="breadcrumbs">
@@ -136,10 +136,8 @@
 
 
 
-					<div data-ng-controller="MapController as map">
-						<leaflet id="map_canvas" style="height:270px" defaults="map.config" center="map.center" layers="map.layers" markers="map.markers" paths="map.paths"></leaflet>
-					</div>
-					<div data-ng-view data-autoscroll></div>
+					<div data-ng-controller="qgovMapController"><div id="map_canvas"></div></div>
+					<div data-ui-view data-autoscroll="false"></div>
 
 
 				</div></div></div><!-- end .article, .box-sizing, .border -->
@@ -149,6 +147,29 @@
 				<!-- global aside -->
 
 
+				<div class="aside search" ng-controller="SearchFormController as form">
+					<h2>Search</h2>
+					<form class="search" id="app-viewport-tools-search" ng-submit="form.submit()">
+						<ol class="questions">
+					  		<li class="viewport search">
+					  			<label class="visuallyhidden" for="query">Enter search term</label>
+					  			<input ng-model="form.search.query" id="query" type="search" size="25" placeholder="Enter search term" value="">
+					  		</li>
+					  		<li class="viewport search">
+					  			<a class="all" href="#app-viewport-tools-results">Show all</a>
+					  		</li>
+					  		<li class="footer">
+					  			<ul class="actions">
+					  				<li><strong><input type="submit" value="Search"></strong></li>
+					  			</ul>
+					  		</li>
+					  	</ol>
+					  </form>
+				</div>
+
+				<div class="aside tip" role="wairole:complementary" aria-labelledby="landmark-label4">
+				  <h2 id="landmark-label4">Visiting a prison</h2> <p>Find more <a href="https://publications.qld.gov.au/dataset/qcs-visitor-fact-sheets">information about visiting correctional centres</a><small class="print-link-url"> ( https://publications.qld.gov.au/dataset/qcs-visitor-fact-sheets )</small> or view our <a href="https://publications.qld.gov.au/dataset/qcs-statewide-map">statewide map (PDF)</a><small class="print-link-url"> ( https://publications.qld.gov.au/dataset/qcs-statewide-map )</small> of our offices, camps and centres around Queensland.</p>
+				</div>
 
 			</div></div></div><!-- end #asides, .box-sizing, .border -->
 
@@ -356,7 +377,7 @@
 <script type="text/javascript" src="https://static.qgov.net.au/assets/v2/script/init.js"></script>
 </div>
 
-<script src="../../app/assets/mam.js"></script>
+<script src="/qgov-mam-angularjs/app/assets/mam.js"></script>
 <div id="analytics">
 	<script id="analytics-inline-config" type="text/javascript"><!--
 		qg.swe.pageTitle = "Search results";

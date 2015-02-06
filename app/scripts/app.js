@@ -1,22 +1,5 @@
 /*global $*/
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
-
-// search results
-.constant( 'RESULTS_PER_PAGE', 10 )
-.constant( 'PAGES_AVAILABLE', 10 )
-
-// CKAN URI format
-// example: https://data.qld.gov.au/dataset/science-capability-directory/resource/8b9178e0-2995-42ad-8e55-37c15b4435a3
-.constant( 'SOURCE', (function() {
-	var sourceUri = $( 'meta[name="DCTERMS.source"]' ).attr( 'content' );
-	var source = sourceUri.split( /\/+/ );
-	return {
-		dataset: source[ source.length - 1],
-		server: source[ 1 ],
-		uri: sourceUri
-	};
-}()))
-
+angular.module( 'qgovMam', [ 'ui.router', 'qgov', 'ckanApi', 'qgov.map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
 
 // markdown config
 .config([ 'markedProvider',
@@ -30,74 +13,54 @@ function(  markedProvider ) {
 }])
 
 
-// routing
-.config([ '$routeProvider', 'SOURCE',
-function(  $routeProvider,   SOURCE ) {
-	$routeProvider
+.config([ '$locationProvider', '$urlRouterProvider', '$stateProvider',
+function(  $locationProvider ,  $urlRouterProvider ,  $stateProvider ) {
+	// no hashbangs
+	$locationProvider.html5Mode( true );
 
-	// route error
-	.when( '/error', {
-		templateUrl: 'error.html'
-	})
-
-	// search results
-	.when( '/', {
-		// old MAM detail view URLs: ?title=<title>
-		redirectTo: function() {
-			// https://github.com/angular/angular.js/issues/7239
-			if ( /title=[^&]/.test( window.location.search )) {
-				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
-			}
-		},
-		controller: 'SearchController',
-		controllerAs: 'vm',
-		templateUrl: 'search.html',
-		resolve: {
-			pageNumber: [ '$location', function( $location ) {
-				return parseInt( $location.search().page, 10 ) || 1;
-			}],
-			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest( SOURCE.dataset );
-			}]
+	// URL handling
+	$urlRouterProvider.rule(function( $injector, $location ) {
+		// ignore hash changes (default browser/SWE behaviour)
+		if ( $location.hash() ) {
+			return true;
 		}
-	})
+	});
 
-	// details view
-	.when( '/:title', {
-		// tidy up old MAM URLs
-		redirectTo: function() {
-			window.location.href = window.location.href.replace( /\?[^#]*/, '' );
-		},
-		controller: 'DetailController',
-		controllerAs: 'vm',
-		templateUrl: 'detail.html',
-		resolve: {
-			title: [ '$route', function( $route ) {
-				return $route.current.params.title;
-			}],
-			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest( SOURCE.dataset );
-			}]
-		}
-	})
-	.otherwise({ redirectTo : '/' });
+	// main routing
+	$stateProvider.state( 'mam', {
+		abstract: true,
+		url: '/',
+		template: '<ui-view/>'
+	});
 }])
 
 
-.run([   '$rootScope', '$location',
-function( $rootScope,   $location ) {
-	// $rootScope.$on( '$routeChangeStart', function() {
-	// 	$rootScope.isLoading = true;
-	// 	$rootScope.loadingPercent = 10;
-	// });
+// URL/route/state changes
+.run([   '$rootScope', '$state', '$location', '$anchorScroll',
+function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
+	$rootScope.$on( '$stateChangeStart', function( event, toState, toParams, fromState ) {
+		// check for greedy search start
+		if ( toState.name === 'mam.search' && $location.search().title ) {
+			// detail state, not search
+			event.preventDefault();
+			if ( fromState.name !== 'mam.detail' ) {
+				// view state please
+				$state.go( 'mam.detail', $location.search() );
+			}
+		}
+	});
 
-	$rootScope.$on( '$routeChangeSuccess', function() {
+	$rootScope.$on( '$stateChangeSuccess', function() {
 		// $rootScope.isLoading = false;
 		// $rootScope.loadingPercent = 100;
 		$( '#article' ).trigger( 'x-height-change' );
+		$anchorScroll( 0 );
 	});
 
-	$rootScope.$on( '$routeChangeError', function() {
-		$location.path( '/error' );
+	$rootScope.$on( '$stateNotFound', function() {
+		console.log( '$stateNotFound' );
+	});
+	$rootScope.$on( '$stateChangeError', function( event, toState, toParams, fromState, fromParams, error ) {
+		console.log( '$stateChangeError', error );
 	});
 }]);

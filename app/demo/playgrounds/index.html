@@ -3,6 +3,7 @@
 <head prefix="og: http://ogp.me/ns#">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<title>{{ swe.pageTitle }} | {{ swe.franchiseName }} | Queensland Government</title>
+	<base href="/demo/playgrounds/" />
 
 <!--#set var="franchise" value="FRANCHISE_ID"-->
 <!--#set var="title" value="TITLE"-->
@@ -10,16 +11,15 @@
 <!--#include virtual="/assets/includes/global/head-assets-styles.html"-->
 <link rel="stylesheet" href="//static.qgov.net.au/assets/v2/style/qgov-map.css" />
 <!--#include virtual="/assets/includes/global/head-assets-scripts.html"-->
-<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular.min.js"></script>
-<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-animate.min.js"></script>
-<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular-route.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.3.12/angular.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.3.12/angular-animate.min.js"></script>
 
 	<meta name="description" content="DESCRIPTION" />
 	<meta name="keywords" content="KEYWORDS" />
 
 	<link rel="schema.DCTERMS" href="http://purl.org/dc/terms/" />
 	<link rel="schema.AGLSTERMS" href="http://www.agls.gov.au/agls/terms/" />
-	
+
 	<meta name="DCTERMS.creator" scheme="AGLSTERMS.GOLD" content="c=AU; o=The State of Queensland; ou=DEPARTMENT NAME; ou=UNIT NAME" />
 	<meta name="DCTERMS.publisher" scheme="AGLSTERMS.AglsAgent" content="corporateName=The State of Queensland; jurisdiction=Queensland" />
 	<meta name="DCTERMS.created" content="YYYY-MM-DD" />
@@ -34,12 +34,12 @@
 	<meta name="DCTERMS.audience" scheme="AGLSTERMS.agls-audience" content="AGLS_AUDIENCE" />
 	<meta name="DCTERMS.jurisdiction" scheme="AGLSTERMS.AglsJuri" content="Queensland" />
 	<meta name="DCTERMS.license" scheme="DCTERMS.URI" content="http://creativecommons.org/licenses/by/3.0/au/" />
-	<meta name="DCTERMS.source" scheme="DCTERMS.URI" content="https://data.qld.gov.au/dataset/data-driven-test-dataset/resource/edcb4535-5b9e-475b-8016-7400e428733a" />
+	<meta name="DCTERMS.source" scheme="DCTERMS.URI" content="https://data.qld.gov.au/dataset/all-abilities-playgrounds/resource/a0afeaf1-e150-45df-91ff-9768799c3156" />
 </head>
 
 <body id="qld-gov-au" class="residents">
 
-<!--#include virtual="/assets/includes/global/header.html"--> 
+<!--#include virtual="/assets/includes/global/header.html"-->
 
 	<div id="page-container"><div class="max-width">
 		<div id="breadcrumbs">
@@ -62,10 +62,8 @@
 <!--#include virtual="/assets/includes/global/page-options-pre.html"-->
 
 
-					<div data-ng-controller="MapController as map">
-						<leaflet id="map_canvas" style="height:270px" defaults="map.config" center="map.center" layers="map.layers" markers="map.markers" paths="map.paths"></leaflet>
-					</div>
-					<div data-ng-view data-autoscroll></div>
+					<div data-ng-controller="qgovMapController"><div id="map_canvas"></div></div>
+					<div data-ui-view data-autoscroll="false"></div>
 
 
 				</div></div></div><!-- end .article, .box-sizing, .border -->

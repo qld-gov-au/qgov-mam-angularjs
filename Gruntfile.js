@@ -2,6 +2,9 @@ module.exports = function(grunt) {
 
   require('matchdep').filterDev('grunt-*').forEach(grunt.loadNpmTasks);
 
+  var pkg = grunt.file.readJSON( 'package.json' );
+  var repoName = pkg.repository.url.replace( /^.*?([^\/]+)\.git/, '$1' );
+
   grunt.initConfig({
     shell: {
       options: {
@@ -126,16 +129,21 @@ module.exports = function(grunt) {
           // 'bower_components/angular/angular.js',
           // 'bower_components/angular-route/angular-route.js',
           // 'bower_components/angular-animate/angular-animate.js',
+          'bower_components/angular-ui-router/release/angular-ui-router.js',
           'app/scripts/qgovTemplateController.js',
-          'app/scripts/mapController.js',
+          'app/scripts/qgovMapController.js',
+          'app/scripts/qgovMapQueensland.js',
           'bower_components/leaflet/dist/leaflet.js',
           'bower_components/leaflet.markercluster/dist/leaflet.markercluster.js',
-          'bower_components/angular-leaflet/dist/angular-leaflet-directive.js',
+          'bower_components/leaflet.fullscreen/Control.FullScreen.js',
           'bower_components/marked/lib/marked.js',
           'bower_components/angular-marked/angular-marked.js',
+          'app/scripts/angular-geocoder-esri.js',
           'app/scripts/ckan.js',
+          'app/scripts/errorController.js',
           'app/scripts/searchController.js',
           'app/scripts/detailController.js',
+          'app/scripts/config.js',
           'app/scripts/app.js',
         ]
       },
@@ -157,7 +165,7 @@ module.exports = function(grunt) {
 
     open: {
       devserver: {
-        path: 'http://localhost:8888'
+        path: 'http://localhost:8888/demo/'
       },
       coverage: {
         path: 'http://localhost:5555'
@@ -211,8 +219,11 @@ module.exports = function(grunt) {
             return grunt.file.read( 'app/assets/includes/global/' + regexMatches[ 0 ] );
           }
         }, {
+          from: 'base href="/demo/',
+          to: 'base href="/' + repoName + '/demo/'
+        }, {
           from: '/assets/mam.js',
-          to: '../../app/assets/mam.js'
+          to: '/' + repoName + '/app/assets/mam.js'
         }]
       }
     }

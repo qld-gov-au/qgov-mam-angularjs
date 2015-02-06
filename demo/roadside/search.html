@@ -1,0 +1,107 @@
+<div class="search-widget" id="tmr-search" ng-controller="SearchFormController as form">
+	<div class="widget-header">
+		<h2>Refine search</h2>
+	</div>
+	<form id="app-viewport-tools-search" ng-submit="form.submit()">
+		<ol class="questions form-section">
+			<li class="widget-col-full">
+				<label for="type">
+					<span class="label">Type of stop</span>
+				</label>
+				<select ng-model="form.search.Type" id="type">
+					<option value="">All</option>
+					<option>Driver reviver</option>
+					<option>Effluent dump site</option>
+					<option>Heavy vehicle rest area</option>
+					<option>Heavy vehicle stopping place</option>
+					<option>Motorist rest area and driver reviver</option>
+					<option>Motorist rest area and heavy vehicle rest area</option>
+					<option>Rest area</option>
+					<option>Scenic stop</option>
+				</select>
+			</li>
+			<li class="widget-col-half-left">
+				<label for="amenities">
+					<span class="label">Features</span>
+				</label>
+				<select ng-model="form.search.Amenities" id="amenities">
+					<option value=""></option>
+					<option>Toilet</option>
+					<option>Disabled toilet</option>
+					<option>Water supply</option>
+					<option>Fireplace</option>
+					<option>Picnic table</option>
+					<option>Shelter shed</option>
+					<option>Playground</option>
+					<option>Gas or electric barbecue</option>
+					<option>Bush walking tracks</option>
+					<option>Camping</option>
+					<option>Boat ramp</option>
+					<option>Lookout at facility</option>
+				</select>
+			</li>
+			<li class="widget-col-half-right">
+				<fieldset>
+					<legend>
+						<span class="label">Is a dog with you?</span>
+						<small class="hint">We'll show stops where you may bring a dog</small>
+					</legend>
+					<ul class="choices compact" ng-init="form.search.Dogs = form.search.Dogs || ''">
+						<li><input type="radio" id="dogs-yes" value="yes" ng-model="form.search.Dogs" /><label for="dogs-yes">Yes</label></li>
+						<li><input type="radio" id="dogs-no" value="" ng-model="form.search.Dogs" /><label for="dogs-no">No</label></li>
+					</ul>
+				</fieldset>
+			</li>
+			<li class="widget-col-full">
+				<label for="location">
+					<span class="label">Location or postcode</span>
+				</label>
+				<input type="text" ng-model="form.search.location" id="location" size="30" value="" placeholder="Enter location or postcode" />
+			</li>
+		</ol>
+		<ol class="footer-section questions">
+			<li class="footer">
+				<ul class="actions">
+					<li><strong><input type="submit" value="Filter results" /></strong></li>
+					<li><em><input class="reset" type="button" value="Reset" /></em></li>
+				</ul>
+			</li>
+		</ol>
+	</form>
+</div>
+
+
+<div id="app-viewport-tools-results">
+	<h2 class="resultset-title">
+		Displaying results
+		<strong>{{ vm.description.start }}–{{ vm.description.end }}</strong>
+		of <strong>{{ vm.description.total }}</strong>
+		<span ng-if="vm.description.keywords">for <strong>{{ vm.description.keywords }}</strong></span>
+	</h2>
+
+	<ol class="search-results">
+		<li ng-repeat="result in vm.searchResults | limitTo: vm.pagination.limit">
+			<h3>
+				<a ui-sref="mam.detail({ title: result.Title })" ui-sref-opts="{ inherit: false }">{{ result.Type }}—{{ result.Suburb }}</a>
+			</h3>
+
+			<p>{{ result.Title }}</p>
+
+			<h4>At this site:</h4>
+			<p>{{ result.Amenities }}</p>
+			<p><strong>Are dogs allowed?</strong> {{ result.Dogs }}</p>
+		</li>
+	</ol>
+
+	<!-- pagination -->
+	<div id="pagination">
+		<ul>
+			<li ng-if="vm.pagination.previous" class="previous"><a ng-href="{{ vm.pagination.pageUrl( vm.pagination.previous ) }}">Previous</a></li>
+			<li ng-repeat="page in vm.pagination.pages" ng-switch="page === vm.pagination.current">
+				<span ng-switch-when="true">{{ page }}</span>
+				<a ng-switch-default ng-href="{{ vm.pagination.pageUrl( page ) }}">{{ page }}</a>
+			</li>
+			<li ng-if="vm.pagination.next" class="next"><a  ng-href="{{ vm.pagination.pageUrl( vm.pagination.next ) }}">Next</a></li>
+		</ul>
+	</div>
+</div>

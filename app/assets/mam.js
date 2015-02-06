@@ -1,4 +1,4235 @@
-angular.module( 'qgov', [] )
+/**
+ * State-based routing for AngularJS
+ * @version v0.2.13
+ * @link http://angular-ui.github.com/
+ * @license MIT License, http://www.opensource.org/licenses/MIT
+ */
+
+/* commonjs package manager support (eg componentjs) */
+if (typeof module !== "undefined" && typeof exports !== "undefined" && module.exports === exports){
+  module.exports = 'ui.router';
+}
+
+(function (window, angular, undefined) {
+/*jshint globalstrict:true*/
+/*global angular:false*/
+'use strict';
+
+var isDefined = angular.isDefined,
+    isFunction = angular.isFunction,
+    isString = angular.isString,
+    isObject = angular.isObject,
+    isArray = angular.isArray,
+    forEach = angular.forEach,
+    extend = angular.extend,
+    copy = angular.copy;
+
+function inherit(parent, extra) {
+  return extend(new (extend(function() {}, { prototype: parent }))(), extra);
+}
+
+function merge(dst) {
+  forEach(arguments, function(obj) {
+    if (obj !== dst) {
+      forEach(obj, function(value, key) {
+        if (!dst.hasOwnProperty(key)) dst[key] = value;
+      });
+    }
+  });
+  return dst;
+}
+
+/**
+ * Finds the common ancestor path between two states.
+ *
+ * @param {Object} first The first state.
+ * @param {Object} second The second state.
+ * @return {Array} Returns an array of state names in descending order, not including the root.
+ */
+function ancestors(first, second) {
+  var path = [];
+
+  for (var n in first.path) {
+    if (first.path[n] !== second.path[n]) break;
+    path.push(first.path[n]);
+  }
+  return path;
+}
+
+/**
+ * IE8-safe wrapper for `Object.keys()`.
+ *
+ * @param {Object} object A JavaScript object.
+ * @return {Array} Returns the keys of the object as an array.
+ */
+function objectKeys(object) {
+  if (Object.keys) {
+    return Object.keys(object);
+  }
+  var result = [];
+
+  angular.forEach(object, function(val, key) {
+    result.push(key);
+  });
+  return result;
+}
+
+/**
+ * IE8-safe wrapper for `Array.prototype.indexOf()`.
+ *
+ * @param {Array} array A JavaScript array.
+ * @param {*} value A value to search the array for.
+ * @return {Number} Returns the array index value of `value`, or `-1` if not present.
+ */
+function indexOf(array, value) {
+  if (Array.prototype.indexOf) {
+    return array.indexOf(value, Number(arguments[2]) || 0);
+  }
+  var len = array.length >>> 0, from = Number(arguments[2]) || 0;
+  from = (from < 0) ? Math.ceil(from) : Math.floor(from);
+
+  if (from < 0) from += len;
+
+  for (; from < len; from++) {
+    if (from in array && array[from] === value) return from;
+  }
+  return -1;
+}
+
+/**
+ * Merges a set of parameters with all parameters inherited between the common parents of the
+ * current state and a given destination state.
+ *
+ * @param {Object} currentParams The value of the current state parameters ($stateParams).
+ * @param {Object} newParams The set of parameters which will be composited with inherited params.
+ * @param {Object} $current Internal definition of object representing the current state.
+ * @param {Object} $to Internal definition of object representing state to transition to.
+ */
+function inheritParams(currentParams, newParams, $current, $to) {
+  var parents = ancestors($current, $to), parentParams, inherited = {}, inheritList = [];
+
+  for (var i in parents) {
+    if (!parents[i].params) continue;
+    parentParams = objectKeys(parents[i].params);
+    if (!parentParams.length) continue;
+
+    for (var j in parentParams) {
+      if (indexOf(inheritList, parentParams[j]) >= 0) continue;
+      inheritList.push(parentParams[j]);
+      inherited[parentParams[j]] = currentParams[parentParams[j]];
+    }
+  }
+  return extend({}, inherited, newParams);
+}
+
+/**
+ * Performs a non-strict comparison of the subset of two objects, defined by a list of keys.
+ *
+ * @param {Object} a The first object.
+ * @param {Object} b The second object.
+ * @param {Array} keys The list of keys within each object to compare. If the list is empty or not specified,
+ *                     it defaults to the list of keys in `a`.
+ * @return {Boolean} Returns `true` if the keys match, otherwise `false`.
+ */
+function equalForKeys(a, b, keys) {
+  if (!keys) {
+    keys = [];
+    for (var n in a) keys.push(n); // Used instead of Object.keys() for IE8 compatibility
+  }
+
+  for (var i=0; i<keys.length; i++) {
+    var k = keys[i];
+    if (a[k] != b[k]) return false; // Not '===', values aren't necessarily normalized
+  }
+  return true;
+}
+
+/**
+ * Returns the subset of an object, based on a list of keys.
+ *
+ * @param {Array} keys
+ * @param {Object} values
+ * @return {Boolean} Returns a subset of `values`.
+ */
+function filterByKeys(keys, values) {
+  var filtered = {};
+
+  forEach(keys, function (name) {
+    filtered[name] = values[name];
+  });
+  return filtered;
+}
+
+// like _.indexBy
+// when you know that your index values will be unique, or you want last-one-in to win
+function indexBy(array, propName) {
+  var result = {};
+  forEach(array, function(item) {
+    result[item[propName]] = item;
+  });
+  return result;
+}
+
+// extracted from underscore.js
+// Return a copy of the object only containing the whitelisted properties.
+function pick(obj) {
+  var copy = {};
+  var keys = Array.prototype.concat.apply(Array.prototype, Array.prototype.slice.call(arguments, 1));
+  forEach(keys, function(key) {
+    if (key in obj) copy[key] = obj[key];
+  });
+  return copy;
+}
+
+// extracted from underscore.js
+// Return a copy of the object omitting the blacklisted properties.
+function omit(obj) {
+  var copy = {};
+  var keys = Array.prototype.concat.apply(Array.prototype, Array.prototype.slice.call(arguments, 1));
+  for (var key in obj) {
+    if (indexOf(keys, key) == -1) copy[key] = obj[key];
+  }
+  return copy;
+}
+
+function pluck(collection, key) {
+  var result = isArray(collection) ? [] : {};
+
+  forEach(collection, function(val, i) {
+    result[i] = isFunction(key) ? key(val) : val[key];
+  });
+  return result;
+}
+
+function filter(collection, callback) {
+  var array = isArray(collection);
+  var result = array ? [] : {};
+  forEach(collection, function(val, i) {
+    if (callback(val, i)) {
+      result[array ? result.length : i] = val;
+    }
+  });
+  return result;
+}
+
+function map(collection, callback) {
+  var result = isArray(collection) ? [] : {};
+
+  forEach(collection, function(val, i) {
+    result[i] = callback(val, i);
+  });
+  return result;
+}
+
+/**
+ * @ngdoc overview
+ * @name ui.router.util
+ *
+ * @description
+ * # ui.router.util sub-module
+ *
+ * This module is a dependency of other sub-modules. Do not include this module as a dependency
+ * in your angular app (use {@link ui.router} module instead).
+ *
+ */
+angular.module('ui.router.util', ['ng']);
+
+/**
+ * @ngdoc overview
+ * @name ui.router.router
+ * 
+ * @requires ui.router.util
+ *
+ * @description
+ * # ui.router.router sub-module
+ *
+ * This module is a dependency of other sub-modules. Do not include this module as a dependency
+ * in your angular app (use {@link ui.router} module instead).
+ */
+angular.module('ui.router.router', ['ui.router.util']);
+
+/**
+ * @ngdoc overview
+ * @name ui.router.state
+ * 
+ * @requires ui.router.router
+ * @requires ui.router.util
+ *
+ * @description
+ * # ui.router.state sub-module
+ *
+ * This module is a dependency of the main ui.router module. Do not include this module as a dependency
+ * in your angular app (use {@link ui.router} module instead).
+ * 
+ */
+angular.module('ui.router.state', ['ui.router.router', 'ui.router.util']);
+
+/**
+ * @ngdoc overview
+ * @name ui.router
+ *
+ * @requires ui.router.state
+ *
+ * @description
+ * # ui.router
+ * 
+ * ## The main module for ui.router 
+ * There are several sub-modules included with the ui.router module, however only this module is needed
+ * as a dependency within your angular app. The other modules are for organization purposes. 
+ *
+ * The modules are:
+ * * ui.router - the main "umbrella" module
+ * * ui.router.router - 
+ * 
+ * *You'll need to include **only** this module as the dependency within your angular app.*
+ * 
+ * <pre>
+ * <!doctype html>
+ * <html ng-app="myApp">
+ * <head>
+ *   <script src="js/angular.js"></script>
+ *   <!-- Include the ui-router script -->
+ *   <script src="js/angular-ui-router.min.js"></script>
+ *   <script>
+ *     // ...and add 'ui.router' as a dependency
+ *     var myApp = angular.module('myApp', ['ui.router']);
+ *   </script>
+ * </head>
+ * <body>
+ * </body>
+ * </html>
+ * </pre>
+ */
+angular.module('ui.router', ['ui.router.state']);
+
+angular.module('ui.router.compat', ['ui.router']);
+
+/**
+ * @ngdoc object
+ * @name ui.router.util.$resolve
+ *
+ * @requires $q
+ * @requires $injector
+ *
+ * @description
+ * Manages resolution of (acyclic) graphs of promises.
+ */
+$Resolve.$inject = ['$q', '$injector'];
+function $Resolve(  $q,    $injector) {
+  
+  var VISIT_IN_PROGRESS = 1,
+      VISIT_DONE = 2,
+      NOTHING = {},
+      NO_DEPENDENCIES = [],
+      NO_LOCALS = NOTHING,
+      NO_PARENT = extend($q.when(NOTHING), { $$promises: NOTHING, $$values: NOTHING });
+  
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$resolve#study
+   * @methodOf ui.router.util.$resolve
+   *
+   * @description
+   * Studies a set of invocables that are likely to be used multiple times.
+   * <pre>
+   * $resolve.study(invocables)(locals, parent, self)
+   * </pre>
+   * is equivalent to
+   * <pre>
+   * $resolve.resolve(invocables, locals, parent, self)
+   * </pre>
+   * but the former is more efficient (in fact `resolve` just calls `study` 
+   * internally).
+   *
+   * @param {object} invocables Invocable objects
+   * @return {function} a function to pass in locals, parent and self
+   */
+  this.study = function (invocables) {
+    if (!isObject(invocables)) throw new Error("'invocables' must be an object");
+    var invocableKeys = objectKeys(invocables || {});
+    
+    // Perform a topological sort of invocables to build an ordered plan
+    var plan = [], cycle = [], visited = {};
+    function visit(value, key) {
+      if (visited[key] === VISIT_DONE) return;
+      
+      cycle.push(key);
+      if (visited[key] === VISIT_IN_PROGRESS) {
+        cycle.splice(0, indexOf(cycle, key));
+        throw new Error("Cyclic dependency: " + cycle.join(" -> "));
+      }
+      visited[key] = VISIT_IN_PROGRESS;
+      
+      if (isString(value)) {
+        plan.push(key, [ function() { return $injector.get(value); }], NO_DEPENDENCIES);
+      } else {
+        var params = $injector.annotate(value);
+        forEach(params, function (param) {
+          if (param !== key && invocables.hasOwnProperty(param)) visit(invocables[param], param);
+        });
+        plan.push(key, value, params);
+      }
+      
+      cycle.pop();
+      visited[key] = VISIT_DONE;
+    }
+    forEach(invocables, visit);
+    invocables = cycle = visited = null; // plan is all that's required
+    
+    function isResolve(value) {
+      return isObject(value) && value.then && value.$$promises;
+    }
+    
+    return function (locals, parent, self) {
+      if (isResolve(locals) && self === undefined) {
+        self = parent; parent = locals; locals = null;
+      }
+      if (!locals) locals = NO_LOCALS;
+      else if (!isObject(locals)) {
+        throw new Error("'locals' must be an object");
+      }       
+      if (!parent) parent = NO_PARENT;
+      else if (!isResolve(parent)) {
+        throw new Error("'parent' must be a promise returned by $resolve.resolve()");
+      }
+      
+      // To complete the overall resolution, we have to wait for the parent
+      // promise and for the promise for each invokable in our plan.
+      var resolution = $q.defer(),
+          result = resolution.promise,
+          promises = result.$$promises = {},
+          values = extend({}, locals),
+          wait = 1 + plan.length/3,
+          merged = false;
+          
+      function done() {
+        // Merge parent values we haven't got yet and publish our own $$values
+        if (!--wait) {
+          if (!merged) merge(values, parent.$$values); 
+          result.$$values = values;
+          result.$$promises = result.$$promises || true; // keep for isResolve()
+          delete result.$$inheritedValues;
+          resolution.resolve(values);
+        }
+      }
+      
+      function fail(reason) {
+        result.$$failure = reason;
+        resolution.reject(reason);
+      }
+
+      // Short-circuit if parent has already failed
+      if (isDefined(parent.$$failure)) {
+        fail(parent.$$failure);
+        return result;
+      }
+      
+      if (parent.$$inheritedValues) {
+        merge(values, omit(parent.$$inheritedValues, invocableKeys));
+      }
+
+      // Merge parent values if the parent has already resolved, or merge
+      // parent promises and wait if the parent resolve is still in progress.
+      extend(promises, parent.$$promises);
+      if (parent.$$values) {
+        merged = merge(values, omit(parent.$$values, invocableKeys));
+        result.$$inheritedValues = omit(parent.$$values, invocableKeys);
+        done();
+      } else {
+        if (parent.$$inheritedValues) {
+          result.$$inheritedValues = omit(parent.$$inheritedValues, invocableKeys);
+        }        
+        parent.then(done, fail);
+      }
+      
+      // Process each invocable in the plan, but ignore any where a local of the same name exists.
+      for (var i=0, ii=plan.length; i<ii; i+=3) {
+        if (locals.hasOwnProperty(plan[i])) done();
+        else invoke(plan[i], plan[i+1], plan[i+2]);
+      }
+      
+      function invoke(key, invocable, params) {
+        // Create a deferred for this invocation. Failures will propagate to the resolution as well.
+        var invocation = $q.defer(), waitParams = 0;
+        function onfailure(reason) {
+          invocation.reject(reason);
+          fail(reason);
+        }
+        // Wait for any parameter that we have a promise for (either from parent or from this
+        // resolve; in that case study() will have made sure it's ordered before us in the plan).
+        forEach(params, function (dep) {
+          if (promises.hasOwnProperty(dep) && !locals.hasOwnProperty(dep)) {
+            waitParams++;
+            promises[dep].then(function (result) {
+              values[dep] = result;
+              if (!(--waitParams)) proceed();
+            }, onfailure);
+          }
+        });
+        if (!waitParams) proceed();
+        function proceed() {
+          if (isDefined(result.$$failure)) return;
+          try {
+            invocation.resolve($injector.invoke(invocable, self, values));
+            invocation.promise.then(function (result) {
+              values[key] = result;
+              done();
+            }, onfailure);
+          } catch (e) {
+            onfailure(e);
+          }
+        }
+        // Publish promise synchronously; invocations further down in the plan may depend on it.
+        promises[key] = invocation.promise;
+      }
+      
+      return result;
+    };
+  };
+  
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$resolve#resolve
+   * @methodOf ui.router.util.$resolve
+   *
+   * @description
+   * Resolves a set of invocables. An invocable is a function to be invoked via 
+   * `$injector.invoke()`, and can have an arbitrary number of dependencies. 
+   * An invocable can either return a value directly,
+   * or a `$q` promise. If a promise is returned it will be resolved and the 
+   * resulting value will be used instead. Dependencies of invocables are resolved 
+   * (in this order of precedence)
+   *
+   * - from the specified `locals`
+   * - from another invocable that is part of this `$resolve` call
+   * - from an invocable that is inherited from a `parent` call to `$resolve` 
+   *   (or recursively
+   * - from any ancestor `$resolve` of that parent).
+   *
+   * The return value of `$resolve` is a promise for an object that contains 
+   * (in this order of precedence)
+   *
+   * - any `locals` (if specified)
+   * - the resolved return values of all injectables
+   * - any values inherited from a `parent` call to `$resolve` (if specified)
+   *
+   * The promise will resolve after the `parent` promise (if any) and all promises 
+   * returned by injectables have been resolved. If any invocable 
+   * (or `$injector.invoke`) throws an exception, or if a promise returned by an 
+   * invocable is rejected, the `$resolve` promise is immediately rejected with the 
+   * same error. A rejection of a `parent` promise (if specified) will likewise be 
+   * propagated immediately. Once the `$resolve` promise has been rejected, no 
+   * further invocables will be called.
+   * 
+   * Cyclic dependencies between invocables are not permitted and will caues `$resolve`
+   * to throw an error. As a special case, an injectable can depend on a parameter 
+   * with the same name as the injectable, which will be fulfilled from the `parent` 
+   * injectable of the same name. This allows inherited values to be decorated. 
+   * Note that in this case any other injectable in the same `$resolve` with the same
+   * dependency would see the decorated value, not the inherited value.
+   *
+   * Note that missing dependencies -- unlike cyclic dependencies -- will cause an 
+   * (asynchronous) rejection of the `$resolve` promise rather than a (synchronous) 
+   * exception.
+   *
+   * Invocables are invoked eagerly as soon as all dependencies are available. 
+   * This is true even for dependencies inherited from a `parent` call to `$resolve`.
+   *
+   * As a special case, an invocable can be a string, in which case it is taken to 
+   * be a service name to be passed to `$injector.get()`. This is supported primarily 
+   * for backwards-compatibility with the `resolve` property of `$routeProvider` 
+   * routes.
+   *
+   * @param {object} invocables functions to invoke or 
+   * `$injector` services to fetch.
+   * @param {object} locals  values to make available to the injectables
+   * @param {object} parent  a promise returned by another call to `$resolve`.
+   * @param {object} self  the `this` for the invoked methods
+   * @return {object} Promise for an object that contains the resolved return value
+   * of all invocables, as well as any inherited and local values.
+   */
+  this.resolve = function (invocables, locals, parent, self) {
+    return this.study(invocables)(locals, parent, self);
+  };
+}
+
+angular.module('ui.router.util').service('$resolve', $Resolve);
+
+
+/**
+ * @ngdoc object
+ * @name ui.router.util.$templateFactory
+ *
+ * @requires $http
+ * @requires $templateCache
+ * @requires $injector
+ *
+ * @description
+ * Service. Manages loading of templates.
+ */
+$TemplateFactory.$inject = ['$http', '$templateCache', '$injector'];
+function $TemplateFactory(  $http,   $templateCache,   $injector) {
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$templateFactory#fromConfig
+   * @methodOf ui.router.util.$templateFactory
+   *
+   * @description
+   * Creates a template from a configuration object. 
+   *
+   * @param {object} config Configuration object for which to load a template. 
+   * The following properties are search in the specified order, and the first one 
+   * that is defined is used to create the template:
+   *
+   * @param {string|object} config.template html string template or function to 
+   * load via {@link ui.router.util.$templateFactory#fromString fromString}.
+   * @param {string|object} config.templateUrl url to load or a function returning 
+   * the url to load via {@link ui.router.util.$templateFactory#fromUrl fromUrl}.
+   * @param {Function} config.templateProvider function to invoke via 
+   * {@link ui.router.util.$templateFactory#fromProvider fromProvider}.
+   * @param {object} params  Parameters to pass to the template function.
+   * @param {object} locals Locals to pass to `invoke` if the template is loaded 
+   * via a `templateProvider`. Defaults to `{ params: params }`.
+   *
+   * @return {string|object}  The template html as a string, or a promise for 
+   * that string,or `null` if no template is configured.
+   */
+  this.fromConfig = function (config, params, locals) {
+    return (
+      isDefined(config.template) ? this.fromString(config.template, params) :
+      isDefined(config.templateUrl) ? this.fromUrl(config.templateUrl, params) :
+      isDefined(config.templateProvider) ? this.fromProvider(config.templateProvider, params, locals) :
+      null
+    );
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$templateFactory#fromString
+   * @methodOf ui.router.util.$templateFactory
+   *
+   * @description
+   * Creates a template from a string or a function returning a string.
+   *
+   * @param {string|object} template html template as a string or function that 
+   * returns an html template as a string.
+   * @param {object} params Parameters to pass to the template function.
+   *
+   * @return {string|object} The template html as a string, or a promise for that 
+   * string.
+   */
+  this.fromString = function (template, params) {
+    return isFunction(template) ? template(params) : template;
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$templateFactory#fromUrl
+   * @methodOf ui.router.util.$templateFactory
+   * 
+   * @description
+   * Loads a template from the a URL via `$http` and `$templateCache`.
+   *
+   * @param {string|Function} url url of the template to load, or a function 
+   * that returns a url.
+   * @param {Object} params Parameters to pass to the url function.
+   * @return {string|Promise.<string>} The template html as a string, or a promise 
+   * for that string.
+   */
+  this.fromUrl = function (url, params) {
+    if (isFunction(url)) url = url(params);
+    if (url == null) return null;
+    else return $http
+        .get(url, { cache: $templateCache, headers: { Accept: 'text/html' }})
+        .then(function(response) { return response.data; });
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$templateFactory#fromProvider
+   * @methodOf ui.router.util.$templateFactory
+   *
+   * @description
+   * Creates a template by invoking an injectable provider function.
+   *
+   * @param {Function} provider Function to invoke via `$injector.invoke`
+   * @param {Object} params Parameters for the template.
+   * @param {Object} locals Locals to pass to `invoke`. Defaults to 
+   * `{ params: params }`.
+   * @return {string|Promise.<string>} The template html as a string, or a promise 
+   * for that string.
+   */
+  this.fromProvider = function (provider, params, locals) {
+    return $injector.invoke(provider, null, locals || { params: params });
+  };
+}
+
+angular.module('ui.router.util').service('$templateFactory', $TemplateFactory);
+
+var $$UMFP; // reference to $UrlMatcherFactoryProvider
+
+/**
+ * @ngdoc object
+ * @name ui.router.util.type:UrlMatcher
+ *
+ * @description
+ * Matches URLs against patterns and extracts named parameters from the path or the search
+ * part of the URL. A URL pattern consists of a path pattern, optionally followed by '?' and a list
+ * of search parameters. Multiple search parameter names are separated by '&'. Search parameters
+ * do not influence whether or not a URL is matched, but their values are passed through into
+ * the matched parameters returned by {@link ui.router.util.type:UrlMatcher#methods_exec exec}.
+ * 
+ * Path parameter placeholders can be specified using simple colon/catch-all syntax or curly brace
+ * syntax, which optionally allows a regular expression for the parameter to be specified:
+ *
+ * * `':'` name - colon placeholder
+ * * `'*'` name - catch-all placeholder
+ * * `'{' name '}'` - curly placeholder
+ * * `'{' name ':' regexp|type '}'` - curly placeholder with regexp or type name. Should the
+ *   regexp itself contain curly braces, they must be in matched pairs or escaped with a backslash.
+ *
+ * Parameter names may contain only word characters (latin letters, digits, and underscore) and
+ * must be unique within the pattern (across both path and search parameters). For colon 
+ * placeholders or curly placeholders without an explicit regexp, a path parameter matches any
+ * number of characters other than '/'. For catch-all placeholders the path parameter matches
+ * any number of characters.
+ * 
+ * Examples:
+ * 
+ * * `'/hello/'` - Matches only if the path is exactly '/hello/'. There is no special treatment for
+ *   trailing slashes, and patterns have to match the entire path, not just a prefix.
+ * * `'/user/:id'` - Matches '/user/bob' or '/user/1234!!!' or even '/user/' but not '/user' or
+ *   '/user/bob/details'. The second path segment will be captured as the parameter 'id'.
+ * * `'/user/{id}'` - Same as the previous example, but using curly brace syntax.
+ * * `'/user/{id:[^/]*}'` - Same as the previous example.
+ * * `'/user/{id:[0-9a-fA-F]{1,8}}'` - Similar to the previous example, but only matches if the id
+ *   parameter consists of 1 to 8 hex digits.
+ * * `'/files/{path:.*}'` - Matches any URL starting with '/files/' and captures the rest of the
+ *   path into the parameter 'path'.
+ * * `'/files/*path'` - ditto.
+ * * `'/calendar/{start:date}'` - Matches "/calendar/2014-11-12" (because the pattern defined
+ *   in the built-in  `date` Type matches `2014-11-12`) and provides a Date object in $stateParams.start
+ *
+ * @param {string} pattern  The pattern to compile into a matcher.
+ * @param {Object} config  A configuration object hash:
+ * @param {Object=} parentMatcher Used to concatenate the pattern/config onto
+ *   an existing UrlMatcher
+ *
+ * * `caseInsensitive` - `true` if URL matching should be case insensitive, otherwise `false`, the default value (for backward compatibility) is `false`.
+ * * `strict` - `false` if matching against a URL with a trailing slash should be treated as equivalent to a URL without a trailing slash, the default value is `true`.
+ *
+ * @property {string} prefix  A static prefix of this pattern. The matcher guarantees that any
+ *   URL matching this matcher (i.e. any string for which {@link ui.router.util.type:UrlMatcher#methods_exec exec()} returns
+ *   non-null) will start with this prefix.
+ *
+ * @property {string} source  The pattern that was passed into the constructor
+ *
+ * @property {string} sourcePath  The path portion of the source property
+ *
+ * @property {string} sourceSearch  The search portion of the source property
+ *
+ * @property {string} regex  The constructed regex that will be used to match against the url when 
+ *   it is time to determine which url will match.
+ *
+ * @returns {Object}  New `UrlMatcher` object
+ */
+function UrlMatcher(pattern, config, parentMatcher) {
+  config = extend({ params: {} }, isObject(config) ? config : {});
+
+  // Find all placeholders and create a compiled pattern, using either classic or curly syntax:
+  //   '*' name
+  //   ':' name
+  //   '{' name '}'
+  //   '{' name ':' regexp '}'
+  // The regular expression is somewhat complicated due to the need to allow curly braces
+  // inside the regular expression. The placeholder regexp breaks down as follows:
+  //    ([:*])([\w\[\]]+)              - classic placeholder ($1 / $2) (search version has - for snake-case)
+  //    \{([\w\[\]]+)(?:\:( ... ))?\}  - curly brace placeholder ($3) with optional regexp/type ... ($4) (search version has - for snake-case
+  //    (?: ... | ... | ... )+         - the regexp consists of any number of atoms, an atom being either
+  //    [^{}\\]+                       - anything other than curly braces or backslash
+  //    \\.                            - a backslash escape
+  //    \{(?:[^{}\\]+|\\.)*\}          - a matched set of curly braces containing other atoms
+  var placeholder       = /([:*])([\w\[\]]+)|\{([\w\[\]]+)(?:\:((?:[^{}\\]+|\\.|\{(?:[^{}\\]+|\\.)*\})+))?\}/g,
+      searchPlaceholder = /([:]?)([\w\[\]-]+)|\{([\w\[\]-]+)(?:\:((?:[^{}\\]+|\\.|\{(?:[^{}\\]+|\\.)*\})+))?\}/g,
+      compiled = '^', last = 0, m,
+      segments = this.segments = [],
+      parentParams = parentMatcher ? parentMatcher.params : {},
+      params = this.params = parentMatcher ? parentMatcher.params.$$new() : new $$UMFP.ParamSet(),
+      paramNames = [];
+
+  function addParameter(id, type, config, location) {
+    paramNames.push(id);
+    if (parentParams[id]) return parentParams[id];
+    if (!/^\w+(-+\w+)*(?:\[\])?$/.test(id)) throw new Error("Invalid parameter name '" + id + "' in pattern '" + pattern + "'");
+    if (params[id]) throw new Error("Duplicate parameter name '" + id + "' in pattern '" + pattern + "'");
+    params[id] = new $$UMFP.Param(id, type, config, location);
+    return params[id];
+  }
+
+  function quoteRegExp(string, pattern, squash) {
+    var surroundPattern = ['',''], result = string.replace(/[\\\[\]\^$*+?.()|{}]/g, "\\$&");
+    if (!pattern) return result;
+    switch(squash) {
+      case false: surroundPattern = ['(', ')'];   break;
+      case true:  surroundPattern = ['?(', ')?']; break;
+      default:    surroundPattern = ['(' + squash + "|", ')?'];  break;
+    }
+    return result + surroundPattern[0] + pattern + surroundPattern[1];
+  }
+
+  this.source = pattern;
+
+  // Split into static segments separated by path parameter placeholders.
+  // The number of segments is always 1 more than the number of parameters.
+  function matchDetails(m, isSearch) {
+    var id, regexp, segment, type, cfg, arrayMode;
+    id          = m[2] || m[3]; // IE[78] returns '' for unmatched groups instead of null
+    cfg         = config.params[id];
+    segment     = pattern.substring(last, m.index);
+    regexp      = isSearch ? m[4] : m[4] || (m[1] == '*' ? '.*' : null);
+    type        = $$UMFP.type(regexp || "string") || inherit($$UMFP.type("string"), { pattern: new RegExp(regexp) });
+    return {
+      id: id, regexp: regexp, segment: segment, type: type, cfg: cfg
+    };
+  }
+
+  var p, param, segment;
+  while ((m = placeholder.exec(pattern))) {
+    p = matchDetails(m, false);
+    if (p.segment.indexOf('?') >= 0) break; // we're into the search part
+
+    param = addParameter(p.id, p.type, p.cfg, "path");
+    compiled += quoteRegExp(p.segment, param.type.pattern.source, param.squash);
+    segments.push(p.segment);
+    last = placeholder.lastIndex;
+  }
+  segment = pattern.substring(last);
+
+  // Find any search parameter names and remove them from the last segment
+  var i = segment.indexOf('?');
+
+  if (i >= 0) {
+    var search = this.sourceSearch = segment.substring(i);
+    segment = segment.substring(0, i);
+    this.sourcePath = pattern.substring(0, last + i);
+
+    if (search.length > 0) {
+      last = 0;
+      while ((m = searchPlaceholder.exec(search))) {
+        p = matchDetails(m, true);
+        param = addParameter(p.id, p.type, p.cfg, "search");
+        last = placeholder.lastIndex;
+        // check if ?&
+      }
+    }
+  } else {
+    this.sourcePath = pattern;
+    this.sourceSearch = '';
+  }
+
+  compiled += quoteRegExp(segment) + (config.strict === false ? '\/?' : '') + '$';
+  segments.push(segment);
+
+  this.regexp = new RegExp(compiled, config.caseInsensitive ? 'i' : undefined);
+  this.prefix = segments[0];
+  this.$$paramNames = paramNames;
+}
+
+/**
+ * @ngdoc function
+ * @name ui.router.util.type:UrlMatcher#concat
+ * @methodOf ui.router.util.type:UrlMatcher
+ *
+ * @description
+ * Returns a new matcher for a pattern constructed by appending the path part and adding the
+ * search parameters of the specified pattern to this pattern. The current pattern is not
+ * modified. This can be understood as creating a pattern for URLs that are relative to (or
+ * suffixes of) the current pattern.
+ *
+ * @example
+ * The following two matchers are equivalent:
+ * <pre>
+ * new UrlMatcher('/user/{id}?q').concat('/details?date');
+ * new UrlMatcher('/user/{id}/details?q&date');
+ * </pre>
+ *
+ * @param {string} pattern  The pattern to append.
+ * @param {Object} config  An object hash of the configuration for the matcher.
+ * @returns {UrlMatcher}  A matcher for the concatenated pattern.
+ */
+UrlMatcher.prototype.concat = function (pattern, config) {
+  // Because order of search parameters is irrelevant, we can add our own search
+  // parameters to the end of the new pattern. Parse the new pattern by itself
+  // and then join the bits together, but it's much easier to do this on a string level.
+  var defaultConfig = {
+    caseInsensitive: $$UMFP.caseInsensitive(),
+    strict: $$UMFP.strictMode(),
+    squash: $$UMFP.defaultSquashPolicy()
+  };
+  return new UrlMatcher(this.sourcePath + pattern + this.sourceSearch, extend(defaultConfig, config), this);
+};
+
+UrlMatcher.prototype.toString = function () {
+  return this.source;
+};
+
+/**
+ * @ngdoc function
+ * @name ui.router.util.type:UrlMatcher#exec
+ * @methodOf ui.router.util.type:UrlMatcher
+ *
+ * @description
+ * Tests the specified path against this matcher, and returns an object containing the captured
+ * parameter values, or null if the path does not match. The returned object contains the values
+ * of any search parameters that are mentioned in the pattern, but their value may be null if
+ * they are not present in `searchParams`. This means that search parameters are always treated
+ * as optional.
+ *
+ * @example
+ * <pre>
+ * new UrlMatcher('/user/{id}?q&r').exec('/user/bob', {
+ *   x: '1', q: 'hello'
+ * });
+ * // returns { id: 'bob', q: 'hello', r: null }
+ * </pre>
+ *
+ * @param {string} path  The URL path to match, e.g. `$location.path()`.
+ * @param {Object} searchParams  URL search parameters, e.g. `$location.search()`.
+ * @returns {Object}  The captured parameter values.
+ */
+UrlMatcher.prototype.exec = function (path, searchParams) {
+  var m = this.regexp.exec(path);
+  if (!m) return null;
+  searchParams = searchParams || {};
+
+  var paramNames = this.parameters(), nTotal = paramNames.length,
+    nPath = this.segments.length - 1,
+    values = {}, i, j, cfg, paramName;
+
+  if (nPath !== m.length - 1) throw new Error("Unbalanced capture group in route '" + this.source + "'");
+
+  function decodePathArray(string) {
+    function reverseString(str) { return str.split("").reverse().join(""); }
+    function unquoteDashes(str) { return str.replace(/\\-/, "-"); }
+
+    var split = reverseString(string).split(/-(?!\\)/);
+    var allReversed = map(split, reverseString);
+    return map(allReversed, unquoteDashes).reverse();
+  }
+
+  for (i = 0; i < nPath; i++) {
+    paramName = paramNames[i];
+    var param = this.params[paramName];
+    var paramVal = m[i+1];
+    // if the param value matches a pre-replace pair, replace the value before decoding.
+    for (j = 0; j < param.replace; j++) {
+      if (param.replace[j].from === paramVal) paramVal = param.replace[j].to;
+    }
+    if (paramVal && param.array === true) paramVal = decodePathArray(paramVal);
+    values[paramName] = param.value(paramVal);
+  }
+  for (/**/; i < nTotal; i++) {
+    paramName = paramNames[i];
+    values[paramName] = this.params[paramName].value(searchParams[paramName]);
+  }
+
+  return values;
+};
+
+/**
+ * @ngdoc function
+ * @name ui.router.util.type:UrlMatcher#parameters
+ * @methodOf ui.router.util.type:UrlMatcher
+ *
+ * @description
+ * Returns the names of all path and search parameters of this pattern in an unspecified order.
+ * 
+ * @returns {Array.<string>}  An array of parameter names. Must be treated as read-only. If the
+ *    pattern has no parameters, an empty array is returned.
+ */
+UrlMatcher.prototype.parameters = function (param) {
+  if (!isDefined(param)) return this.$$paramNames;
+  return this.params[param] || null;
+};
+
+/**
+ * @ngdoc function
+ * @name ui.router.util.type:UrlMatcher#validate
+ * @methodOf ui.router.util.type:UrlMatcher
+ *
+ * @description
+ * Checks an object hash of parameters to validate their correctness according to the parameter
+ * types of this `UrlMatcher`.
+ *
+ * @param {Object} params The object hash of parameters to validate.
+ * @returns {boolean} Returns `true` if `params` validates, otherwise `false`.
+ */
+UrlMatcher.prototype.validates = function (params) {
+  return this.params.$$validates(params);
+};
+
+/**
+ * @ngdoc function
+ * @name ui.router.util.type:UrlMatcher#format
+ * @methodOf ui.router.util.type:UrlMatcher
+ *
+ * @description
+ * Creates a URL that matches this pattern by substituting the specified values
+ * for the path and search parameters. Null values for path parameters are
+ * treated as empty strings.
+ *
+ * @example
+ * <pre>
+ * new UrlMatcher('/user/{id}?q').format({ id:'bob', q:'yes' });
+ * // returns '/user/bob?q=yes'
+ * </pre>
+ *
+ * @param {Object} values  the values to substitute for the parameters in this pattern.
+ * @returns {string}  the formatted URL (path and optionally search part).
+ */
+UrlMatcher.prototype.format = function (values) {
+  values = values || {};
+  var segments = this.segments, params = this.parameters(), paramset = this.params;
+  if (!this.validates(values)) return null;
+
+  var i, search = false, nPath = segments.length - 1, nTotal = params.length, result = segments[0];
+
+  function encodeDashes(str) { // Replace dashes with encoded "\-"
+    return encodeURIComponent(str).replace(/-/g, function(c) { return '%5C%' + c.charCodeAt(0).toString(16).toUpperCase(); });
+  }
+
+  for (i = 0; i < nTotal; i++) {
+    var isPathParam = i < nPath;
+    var name = params[i], param = paramset[name], value = param.value(values[name]);
+    var isDefaultValue = param.isOptional && param.type.equals(param.value(), value);
+    var squash = isDefaultValue ? param.squash : false;
+    var encoded = param.type.encode(value);
+
+    if (isPathParam) {
+      var nextSegment = segments[i + 1];
+      if (squash === false) {
+        if (encoded != null) {
+          if (isArray(encoded)) {
+            result += map(encoded, encodeDashes).join("-");
+          } else {
+            result += encodeURIComponent(encoded);
+          }
+        }
+        result += nextSegment;
+      } else if (squash === true) {
+        var capture = result.match(/\/$/) ? /\/?(.*)/ : /(.*)/;
+        result += nextSegment.match(capture)[1];
+      } else if (isString(squash)) {
+        result += squash + nextSegment;
+      }
+    } else {
+      if (encoded == null || (isDefaultValue && squash !== false)) continue;
+      if (!isArray(encoded)) encoded = [ encoded ];
+      encoded = map(encoded, encodeURIComponent).join('&' + name + '=');
+      result += (search ? '&' : '?') + (name + '=' + encoded);
+      search = true;
+    }
+  }
+
+  return result;
+};
+
+/**
+ * @ngdoc object
+ * @name ui.router.util.type:Type
+ *
+ * @description
+ * Implements an interface to define custom parameter types that can be decoded from and encoded to
+ * string parameters matched in a URL. Used by {@link ui.router.util.type:UrlMatcher `UrlMatcher`}
+ * objects when matching or formatting URLs, or comparing or validating parameter values.
+ *
+ * See {@link ui.router.util.$urlMatcherFactory#methods_type `$urlMatcherFactory#type()`} for more
+ * information on registering custom types.
+ *
+ * @param {Object} config  A configuration object which contains the custom type definition.  The object's
+ *        properties will override the default methods and/or pattern in `Type`'s public interface.
+ * @example
+ * <pre>
+ * {
+ *   decode: function(val) { return parseInt(val, 10); },
+ *   encode: function(val) { return val && val.toString(); },
+ *   equals: function(a, b) { return this.is(a) && a === b; },
+ *   is: function(val) { return angular.isNumber(val) isFinite(val) && val % 1 === 0; },
+ *   pattern: /\d+/
+ * }
+ * </pre>
+ *
+ * @property {RegExp} pattern The regular expression pattern used to match values of this type when
+ *           coming from a substring of a URL.
+ *
+ * @returns {Object}  Returns a new `Type` object.
+ */
+function Type(config) {
+  extend(this, config);
+}
+
+/**
+ * @ngdoc function
+ * @name ui.router.util.type:Type#is
+ * @methodOf ui.router.util.type:Type
+ *
+ * @description
+ * Detects whether a value is of a particular type. Accepts a native (decoded) value
+ * and determines whether it matches the current `Type` object.
+ *
+ * @param {*} val  The value to check.
+ * @param {string} key  Optional. If the type check is happening in the context of a specific
+ *        {@link ui.router.util.type:UrlMatcher `UrlMatcher`} object, this is the name of the
+ *        parameter in which `val` is stored. Can be used for meta-programming of `Type` objects.
+ * @returns {Boolean}  Returns `true` if the value matches the type, otherwise `false`.
+ */
+Type.prototype.is = function(val, key) {
+  return true;
+};
+
+/**
+ * @ngdoc function
+ * @name ui.router.util.type:Type#encode
+ * @methodOf ui.router.util.type:Type
+ *
+ * @description
+ * Encodes a custom/native type value to a string that can be embedded in a URL. Note that the
+ * return value does *not* need to be URL-safe (i.e. passed through `encodeURIComponent()`), it
+ * only needs to be a representation of `val` that has been coerced to a string.
+ *
+ * @param {*} val  The value to encode.
+ * @param {string} key  The name of the parameter in which `val` is stored. Can be used for
+ *        meta-programming of `Type` objects.
+ * @returns {string}  Returns a string representation of `val` that can be encoded in a URL.
+ */
+Type.prototype.encode = function(val, key) {
+  return val;
+};
+
+/**
+ * @ngdoc function
+ * @name ui.router.util.type:Type#decode
+ * @methodOf ui.router.util.type:Type
+ *
+ * @description
+ * Converts a parameter value (from URL string or transition param) to a custom/native value.
+ *
+ * @param {string} val  The URL parameter value to decode.
+ * @param {string} key  The name of the parameter in which `val` is stored. Can be used for
+ *        meta-programming of `Type` objects.
+ * @returns {*}  Returns a custom representation of the URL parameter value.
+ */
+Type.prototype.decode = function(val, key) {
+  return val;
+};
+
+/**
+ * @ngdoc function
+ * @name ui.router.util.type:Type#equals
+ * @methodOf ui.router.util.type:Type
+ *
+ * @description
+ * Determines whether two decoded values are equivalent.
+ *
+ * @param {*} a  A value to compare against.
+ * @param {*} b  A value to compare against.
+ * @returns {Boolean}  Returns `true` if the values are equivalent/equal, otherwise `false`.
+ */
+Type.prototype.equals = function(a, b) {
+  return a == b;
+};
+
+Type.prototype.$subPattern = function() {
+  var sub = this.pattern.toString();
+  return sub.substr(1, sub.length - 2);
+};
+
+Type.prototype.pattern = /.*/;
+
+Type.prototype.toString = function() { return "{Type:" + this.name + "}"; };
+
+/*
+ * Wraps an existing custom Type as an array of Type, depending on 'mode'.
+ * e.g.:
+ * - urlmatcher pattern "/path?{queryParam[]:int}"
+ * - url: "/path?queryParam=1&queryParam=2
+ * - $stateParams.queryParam will be [1, 2]
+ * if `mode` is "auto", then
+ * - url: "/path?queryParam=1 will create $stateParams.queryParam: 1
+ * - url: "/path?queryParam=1&queryParam=2 will create $stateParams.queryParam: [1, 2]
+ */
+Type.prototype.$asArray = function(mode, isSearch) {
+  if (!mode) return this;
+  if (mode === "auto" && !isSearch) throw new Error("'auto' array mode is for query parameters only");
+  return new ArrayType(this, mode);
+
+  function ArrayType(type, mode) {
+    function bindTo(type, callbackName) {
+      return function() {
+        return type[callbackName].apply(type, arguments);
+      };
+    }
+
+    // Wrap non-array value as array
+    function arrayWrap(val) { return isArray(val) ? val : (isDefined(val) ? [ val ] : []); }
+    // Unwrap array value for "auto" mode. Return undefined for empty array.
+    function arrayUnwrap(val) {
+      switch(val.length) {
+        case 0: return undefined;
+        case 1: return mode === "auto" ? val[0] : val;
+        default: return val;
+      }
+    }
+    function falsey(val) { return !val; }
+
+    // Wraps type (.is/.encode/.decode) functions to operate on each value of an array
+    function arrayHandler(callback, allTruthyMode) {
+      return function handleArray(val) {
+        val = arrayWrap(val);
+        var result = map(val, callback);
+        if (allTruthyMode === true)
+          return filter(result, falsey).length === 0;
+        return arrayUnwrap(result);
+      };
+    }
+
+    // Wraps type (.equals) functions to operate on each value of an array
+    function arrayEqualsHandler(callback) {
+      return function handleArray(val1, val2) {
+        var left = arrayWrap(val1), right = arrayWrap(val2);
+        if (left.length !== right.length) return false;
+        for (var i = 0; i < left.length; i++) {
+          if (!callback(left[i], right[i])) return false;
+        }
+        return true;
+      };
+    }
+
+    this.encode = arrayHandler(bindTo(type, 'encode'));
+    this.decode = arrayHandler(bindTo(type, 'decode'));
+    this.is     = arrayHandler(bindTo(type, 'is'), true);
+    this.equals = arrayEqualsHandler(bindTo(type, 'equals'));
+    this.pattern = type.pattern;
+    this.$arrayMode = mode;
+  }
+};
+
+
+
+/**
+ * @ngdoc object
+ * @name ui.router.util.$urlMatcherFactory
+ *
+ * @description
+ * Factory for {@link ui.router.util.type:UrlMatcher `UrlMatcher`} instances. The factory
+ * is also available to providers under the name `$urlMatcherFactoryProvider`.
+ */
+function $UrlMatcherFactory() {
+  $$UMFP = this;
+
+  var isCaseInsensitive = false, isStrictMode = true, defaultSquashPolicy = false;
+
+  function valToString(val) { return val != null ? val.toString().replace(/\//g, "%2F") : val; }
+  function valFromString(val) { return val != null ? val.toString().replace(/%2F/g, "/") : val; }
+//  TODO: in 1.0, make string .is() return false if value is undefined by default.
+//  function regexpMatches(val) { /*jshint validthis:true */ return isDefined(val) && this.pattern.test(val); }
+  function regexpMatches(val) { /*jshint validthis:true */ return this.pattern.test(val); }
+
+  var $types = {}, enqueue = true, typeQueue = [], injector, defaultTypes = {
+    string: {
+      encode: valToString,
+      decode: valFromString,
+      is: regexpMatches,
+      pattern: /[^/]*/
+    },
+    int: {
+      encode: valToString,
+      decode: function(val) { return parseInt(val, 10); },
+      is: function(val) { return isDefined(val) && this.decode(val.toString()) === val; },
+      pattern: /\d+/
+    },
+    bool: {
+      encode: function(val) { return val ? 1 : 0; },
+      decode: function(val) { return parseInt(val, 10) !== 0; },
+      is: function(val) { return val === true || val === false; },
+      pattern: /0|1/
+    },
+    date: {
+      encode: function (val) {
+        if (!this.is(val))
+          return undefined;
+        return [ val.getFullYear(),
+          ('0' + (val.getMonth() + 1)).slice(-2),
+          ('0' + val.getDate()).slice(-2)
+        ].join("-");
+      },
+      decode: function (val) {
+        if (this.is(val)) return val;
+        var match = this.capture.exec(val);
+        return match ? new Date(match[1], match[2] - 1, match[3]) : undefined;
+      },
+      is: function(val) { return val instanceof Date && !isNaN(val.valueOf()); },
+      equals: function (a, b) { return this.is(a) && this.is(b) && a.toISOString() === b.toISOString(); },
+      pattern: /[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[1-2][0-9]|3[0-1])/,
+      capture: /([0-9]{4})-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])/
+    },
+    json: {
+      encode: angular.toJson,
+      decode: angular.fromJson,
+      is: angular.isObject,
+      equals: angular.equals,
+      pattern: /[^/]*/
+    },
+    any: { // does not encode/decode
+      encode: angular.identity,
+      decode: angular.identity,
+      is: angular.identity,
+      equals: angular.equals,
+      pattern: /.*/
+    }
+  };
+
+  function getDefaultConfig() {
+    return {
+      strict: isStrictMode,
+      caseInsensitive: isCaseInsensitive
+    };
+  }
+
+  function isInjectable(value) {
+    return (isFunction(value) || (isArray(value) && isFunction(value[value.length - 1])));
+  }
+
+  /**
+   * [Internal] Get the default value of a parameter, which may be an injectable function.
+   */
+  $UrlMatcherFactory.$$getDefaultValue = function(config) {
+    if (!isInjectable(config.value)) return config.value;
+    if (!injector) throw new Error("Injectable functions cannot be called at configuration time");
+    return injector.invoke(config.value);
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$urlMatcherFactory#caseInsensitive
+   * @methodOf ui.router.util.$urlMatcherFactory
+   *
+   * @description
+   * Defines whether URL matching should be case sensitive (the default behavior), or not.
+   *
+   * @param {boolean} value `false` to match URL in a case sensitive manner; otherwise `true`;
+   * @returns {boolean} the current value of caseInsensitive
+   */
+  this.caseInsensitive = function(value) {
+    if (isDefined(value))
+      isCaseInsensitive = value;
+    return isCaseInsensitive;
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$urlMatcherFactory#strictMode
+   * @methodOf ui.router.util.$urlMatcherFactory
+   *
+   * @description
+   * Defines whether URLs should match trailing slashes, or not (the default behavior).
+   *
+   * @param {boolean=} value `false` to match trailing slashes in URLs, otherwise `true`.
+   * @returns {boolean} the current value of strictMode
+   */
+  this.strictMode = function(value) {
+    if (isDefined(value))
+      isStrictMode = value;
+    return isStrictMode;
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$urlMatcherFactory#defaultSquashPolicy
+   * @methodOf ui.router.util.$urlMatcherFactory
+   *
+   * @description
+   * Sets the default behavior when generating or matching URLs with default parameter values.
+   *
+   * @param {string} value A string that defines the default parameter URL squashing behavior.
+   *    `nosquash`: When generating an href with a default parameter value, do not squash the parameter value from the URL
+   *    `slash`: When generating an href with a default parameter value, squash (remove) the parameter value, and, if the
+   *             parameter is surrounded by slashes, squash (remove) one slash from the URL
+   *    any other string, e.g. "~": When generating an href with a default parameter value, squash (remove)
+   *             the parameter value from the URL and replace it with this string.
+   */
+  this.defaultSquashPolicy = function(value) {
+    if (!isDefined(value)) return defaultSquashPolicy;
+    if (value !== true && value !== false && !isString(value))
+      throw new Error("Invalid squash policy: " + value + ". Valid policies: false, true, arbitrary-string");
+    defaultSquashPolicy = value;
+    return value;
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$urlMatcherFactory#compile
+   * @methodOf ui.router.util.$urlMatcherFactory
+   *
+   * @description
+   * Creates a {@link ui.router.util.type:UrlMatcher `UrlMatcher`} for the specified pattern.
+   *
+   * @param {string} pattern  The URL pattern.
+   * @param {Object} config  The config object hash.
+   * @returns {UrlMatcher}  The UrlMatcher.
+   */
+  this.compile = function (pattern, config) {
+    return new UrlMatcher(pattern, extend(getDefaultConfig(), config));
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$urlMatcherFactory#isMatcher
+   * @methodOf ui.router.util.$urlMatcherFactory
+   *
+   * @description
+   * Returns true if the specified object is a `UrlMatcher`, or false otherwise.
+   *
+   * @param {Object} object  The object to perform the type check against.
+   * @returns {Boolean}  Returns `true` if the object matches the `UrlMatcher` interface, by
+   *          implementing all the same methods.
+   */
+  this.isMatcher = function (o) {
+    if (!isObject(o)) return false;
+    var result = true;
+
+    forEach(UrlMatcher.prototype, function(val, name) {
+      if (isFunction(val)) {
+        result = result && (isDefined(o[name]) && isFunction(o[name]));
+      }
+    });
+    return result;
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.util.$urlMatcherFactory#type
+   * @methodOf ui.router.util.$urlMatcherFactory
+   *
+   * @description
+   * Registers a custom {@link ui.router.util.type:Type `Type`} object that can be used to
+   * generate URLs with typed parameters.
+   *
+   * @param {string} name  The type name.
+   * @param {Object|Function} definition   The type definition. See
+   *        {@link ui.router.util.type:Type `Type`} for information on the values accepted.
+   * @param {Object|Function} definitionFn (optional) A function that is injected before the app
+   *        runtime starts.  The result of this function is merged into the existing `definition`.
+   *        See {@link ui.router.util.type:Type `Type`} for information on the values accepted.
+   *
+   * @returns {Object}  Returns `$urlMatcherFactoryProvider`.
+   *
+   * @example
+   * This is a simple example of a custom type that encodes and decodes items from an
+   * array, using the array index as the URL-encoded value:
+   *
+   * <pre>
+   * var list = ['John', 'Paul', 'George', 'Ringo'];
+   *
+   * $urlMatcherFactoryProvider.type('listItem', {
+   *   encode: function(item) {
+   *     // Represent the list item in the URL using its corresponding index
+   *     return list.indexOf(item);
+   *   },
+   *   decode: function(item) {
+   *     // Look up the list item by index
+   *     return list[parseInt(item, 10)];
+   *   },
+   *   is: function(item) {
+   *     // Ensure the item is valid by checking to see that it appears
+   *     // in the list
+   *     return list.indexOf(item) > -1;
+   *   }
+   * });
+   *
+   * $stateProvider.state('list', {
+   *   url: "/list/{item:listItem}",
+   *   controller: function($scope, $stateParams) {
+   *     console.log($stateParams.item);
+   *   }
+   * });
+   *
+   * // ...
+   *
+   * // Changes URL to '/list/3', logs "Ringo" to the console
+   * $state.go('list', { item: "Ringo" });
+   * </pre>
+   *
+   * This is a more complex example of a type that relies on dependency injection to
+   * interact with services, and uses the parameter name from the URL to infer how to
+   * handle encoding and decoding parameter values:
+   *
+   * <pre>
+   * // Defines a custom type that gets a value from a service,
+   * // where each service gets different types of values from
+   * // a backend API:
+   * $urlMatcherFactoryProvider.type('dbObject', {}, function(Users, Posts) {
+   *
+   *   // Matches up services to URL parameter names
+   *   var services = {
+   *     user: Users,
+   *     post: Posts
+   *   };
+   *
+   *   return {
+   *     encode: function(object) {
+   *       // Represent the object in the URL using its unique ID
+   *       return object.id;
+   *     },
+   *     decode: function(value, key) {
+   *       // Look up the object by ID, using the parameter
+   *       // name (key) to call the correct service
+   *       return services[key].findById(value);
+   *     },
+   *     is: function(object, key) {
+   *       // Check that object is a valid dbObject
+   *       return angular.isObject(object) && object.id && services[key];
+   *     }
+   *     equals: function(a, b) {
+   *       // Check the equality of decoded objects by comparing
+   *       // their unique IDs
+   *       return a.id === b.id;
+   *     }
+   *   };
+   * });
+   *
+   * // In a config() block, you can then attach URLs with
+   * // type-annotated parameters:
+   * $stateProvider.state('users', {
+   *   url: "/users",
+   *   // ...
+   * }).state('users.item', {
+   *   url: "/{user:dbObject}",
+   *   controller: function($scope, $stateParams) {
+   *     // $stateParams.user will now be an object returned from
+   *     // the Users service
+   *   },
+   *   // ...
+   * });
+   * </pre>
+   */
+  this.type = function (name, definition, definitionFn) {
+    if (!isDefined(definition)) return $types[name];
+    if ($types.hasOwnProperty(name)) throw new Error("A type named '" + name + "' has already been defined.");
+
+    $types[name] = new Type(extend({ name: name }, definition));
+    if (definitionFn) {
+      typeQueue.push({ name: name, def: definitionFn });
+      if (!enqueue) flushTypeQueue();
+    }
+    return this;
+  };
+
+  // `flushTypeQueue()` waits until `$urlMatcherFactory` is injected before invoking the queued `definitionFn`s
+  function flushTypeQueue() {
+    while(typeQueue.length) {
+      var type = typeQueue.shift();
+      if (type.pattern) throw new Error("You cannot override a type's .pattern at runtime.");
+      angular.extend($types[type.name], injector.invoke(type.def));
+    }
+  }
+
+  // Register default types. Store them in the prototype of $types.
+  forEach(defaultTypes, function(type, name) { $types[name] = new Type(extend({name: name}, type)); });
+  $types = inherit($types, {});
+
+  /* No need to document $get, since it returns this */
+  this.$get = ['$injector', function ($injector) {
+    injector = $injector;
+    enqueue = false;
+    flushTypeQueue();
+
+    forEach(defaultTypes, function(type, name) {
+      if (!$types[name]) $types[name] = new Type(type);
+    });
+    return this;
+  }];
+
+  this.Param = function Param(id, type, config, location) {
+    var self = this;
+    config = unwrapShorthand(config);
+    type = getType(config, type, location);
+    var arrayMode = getArrayMode();
+    type = arrayMode ? type.$asArray(arrayMode, location === "search") : type;
+    if (type.name === "string" && !arrayMode && location === "path" && config.value === undefined)
+      config.value = ""; // for 0.2.x; in 0.3.0+ do not automatically default to ""
+    var isOptional = config.value !== undefined;
+    var squash = getSquashPolicy(config, isOptional);
+    var replace = getReplace(config, arrayMode, isOptional, squash);
+
+    function unwrapShorthand(config) {
+      var keys = isObject(config) ? objectKeys(config) : [];
+      var isShorthand = indexOf(keys, "value") === -1 && indexOf(keys, "type") === -1 &&
+                        indexOf(keys, "squash") === -1 && indexOf(keys, "array") === -1;
+      if (isShorthand) config = { value: config };
+      config.$$fn = isInjectable(config.value) ? config.value : function () { return config.value; };
+      return config;
+    }
+
+    function getType(config, urlType, location) {
+      if (config.type && urlType) throw new Error("Param '"+id+"' has two type configurations.");
+      if (urlType) return urlType;
+      if (!config.type) return (location === "config" ? $types.any : $types.string);
+      return config.type instanceof Type ? config.type : new Type(config.type);
+    }
+
+    // array config: param name (param[]) overrides default settings.  explicit config overrides param name.
+    function getArrayMode() {
+      var arrayDefaults = { array: (location === "search" ? "auto" : false) };
+      var arrayParamNomenclature = id.match(/\[\]$/) ? { array: true } : {};
+      return extend(arrayDefaults, arrayParamNomenclature, config).array;
+    }
+
+    /**
+     * returns false, true, or the squash value to indicate the "default parameter url squash policy".
+     */
+    function getSquashPolicy(config, isOptional) {
+      var squash = config.squash;
+      if (!isOptional || squash === false) return false;
+      if (!isDefined(squash) || squash == null) return defaultSquashPolicy;
+      if (squash === true || isString(squash)) return squash;
+      throw new Error("Invalid squash policy: '" + squash + "'. Valid policies: false, true, or arbitrary string");
+    }
+
+    function getReplace(config, arrayMode, isOptional, squash) {
+      var replace, configuredKeys, defaultPolicy = [
+        { from: "",   to: (isOptional || arrayMode ? undefined : "") },
+        { from: null, to: (isOptional || arrayMode ? undefined : "") }
+      ];
+      replace = isArray(config.replace) ? config.replace : [];
+      if (isString(squash))
+        replace.push({ from: squash, to: undefined });
+      configuredKeys = map(replace, function(item) { return item.from; } );
+      return filter(defaultPolicy, function(item) { return indexOf(configuredKeys, item.from) === -1; }).concat(replace);
+    }
+
+    /**
+     * [Internal] Get the default value of a parameter, which may be an injectable function.
+     */
+    function $$getDefaultValue() {
+      if (!injector) throw new Error("Injectable functions cannot be called at configuration time");
+      return injector.invoke(config.$$fn);
+    }
+
+    /**
+     * [Internal] Gets the decoded representation of a value if the value is defined, otherwise, returns the
+     * default value, which may be the result of an injectable function.
+     */
+    function $value(value) {
+      function hasReplaceVal(val) { return function(obj) { return obj.from === val; }; }
+      function $replace(value) {
+        var replacement = map(filter(self.replace, hasReplaceVal(value)), function(obj) { return obj.to; });
+        return replacement.length ? replacement[0] : value;
+      }
+      value = $replace(value);
+      return isDefined(value) ? self.type.decode(value) : $$getDefaultValue();
+    }
+
+    function toString() { return "{Param:" + id + " " + type + " squash: '" + squash + "' optional: " + isOptional + "}"; }
+
+    extend(this, {
+      id: id,
+      type: type,
+      location: location,
+      array: arrayMode,
+      squash: squash,
+      replace: replace,
+      isOptional: isOptional,
+      value: $value,
+      dynamic: undefined,
+      config: config,
+      toString: toString
+    });
+  };
+
+  function ParamSet(params) {
+    extend(this, params || {});
+  }
+
+  ParamSet.prototype = {
+    $$new: function() {
+      return inherit(this, extend(new ParamSet(), { $$parent: this}));
+    },
+    $$keys: function () {
+      var keys = [], chain = [], parent = this,
+        ignore = objectKeys(ParamSet.prototype);
+      while (parent) { chain.push(parent); parent = parent.$$parent; }
+      chain.reverse();
+      forEach(chain, function(paramset) {
+        forEach(objectKeys(paramset), function(key) {
+            if (indexOf(keys, key) === -1 && indexOf(ignore, key) === -1) keys.push(key);
+        });
+      });
+      return keys;
+    },
+    $$values: function(paramValues) {
+      var values = {}, self = this;
+      forEach(self.$$keys(), function(key) {
+        values[key] = self[key].value(paramValues && paramValues[key]);
+      });
+      return values;
+    },
+    $$equals: function(paramValues1, paramValues2) {
+      var equal = true, self = this;
+      forEach(self.$$keys(), function(key) {
+        var left = paramValues1 && paramValues1[key], right = paramValues2 && paramValues2[key];
+        if (!self[key].type.equals(left, right)) equal = false;
+      });
+      return equal;
+    },
+    $$validates: function $$validate(paramValues) {
+      var result = true, isOptional, val, param, self = this;
+
+      forEach(this.$$keys(), function(key) {
+        param = self[key];
+        val = paramValues[key];
+        isOptional = !val && param.isOptional;
+        result = result && (isOptional || !!param.type.is(val));
+      });
+      return result;
+    },
+    $$parent: undefined
+  };
+
+  this.ParamSet = ParamSet;
+}
+
+// Register as a provider so it's available to other providers
+angular.module('ui.router.util').provider('$urlMatcherFactory', $UrlMatcherFactory);
+angular.module('ui.router.util').run(['$urlMatcherFactory', function($urlMatcherFactory) { }]);
+
+/**
+ * @ngdoc object
+ * @name ui.router.router.$urlRouterProvider
+ *
+ * @requires ui.router.util.$urlMatcherFactoryProvider
+ * @requires $locationProvider
+ *
+ * @description
+ * `$urlRouterProvider` has the responsibility of watching `$location`. 
+ * When `$location` changes it runs through a list of rules one by one until a 
+ * match is found. `$urlRouterProvider` is used behind the scenes anytime you specify 
+ * a url in a state configuration. All urls are compiled into a UrlMatcher object.
+ *
+ * There are several methods on `$urlRouterProvider` that make it useful to use directly
+ * in your module config.
+ */
+$UrlRouterProvider.$inject = ['$locationProvider', '$urlMatcherFactoryProvider'];
+function $UrlRouterProvider(   $locationProvider,   $urlMatcherFactory) {
+  var rules = [], otherwise = null, interceptDeferred = false, listener;
+
+  // Returns a string that is a prefix of all strings matching the RegExp
+  function regExpPrefix(re) {
+    var prefix = /^\^((?:\\[^a-zA-Z0-9]|[^\\\[\]\^$*+?.()|{}]+)*)/.exec(re.source);
+    return (prefix != null) ? prefix[1].replace(/\\(.)/g, "$1") : '';
+  }
+
+  // Interpolates matched values into a String.replace()-style pattern
+  function interpolate(pattern, match) {
+    return pattern.replace(/\$(\$|\d{1,2})/, function (m, what) {
+      return match[what === '$' ? 0 : Number(what)];
+    });
+  }
+
+  /**
+   * @ngdoc function
+   * @name ui.router.router.$urlRouterProvider#rule
+   * @methodOf ui.router.router.$urlRouterProvider
+   *
+   * @description
+   * Defines rules that are used by `$urlRouterProvider` to find matches for
+   * specific URLs.
+   *
+   * @example
+   * <pre>
+   * var app = angular.module('app', ['ui.router.router']);
+   *
+   * app.config(function ($urlRouterProvider) {
+   *   // Here's an example of how you might allow case insensitive urls
+   *   $urlRouterProvider.rule(function ($injector, $location) {
+   *     var path = $location.path(),
+   *         normalized = path.toLowerCase();
+   *
+   *     if (path !== normalized) {
+   *       return normalized;
+   *     }
+   *   });
+   * });
+   * </pre>
+   *
+   * @param {object} rule Handler function that takes `$injector` and `$location`
+   * services as arguments. You can use them to return a valid path as a string.
+   *
+   * @return {object} `$urlRouterProvider` - `$urlRouterProvider` instance
+   */
+  this.rule = function (rule) {
+    if (!isFunction(rule)) throw new Error("'rule' must be a function");
+    rules.push(rule);
+    return this;
+  };
+
+  /**
+   * @ngdoc object
+   * @name ui.router.router.$urlRouterProvider#otherwise
+   * @methodOf ui.router.router.$urlRouterProvider
+   *
+   * @description
+   * Defines a path that is used when an invalid route is requested.
+   *
+   * @example
+   * <pre>
+   * var app = angular.module('app', ['ui.router.router']);
+   *
+   * app.config(function ($urlRouterProvider) {
+   *   // if the path doesn't match any of the urls you configured
+   *   // otherwise will take care of routing the user to the
+   *   // specified url
+   *   $urlRouterProvider.otherwise('/index');
+   *
+   *   // Example of using function rule as param
+   *   $urlRouterProvider.otherwise(function ($injector, $location) {
+   *     return '/a/valid/url';
+   *   });
+   * });
+   * </pre>
+   *
+   * @param {string|object} rule The url path you want to redirect to or a function 
+   * rule that returns the url path. The function version is passed two params: 
+   * `$injector` and `$location` services, and must return a url string.
+   *
+   * @return {object} `$urlRouterProvider` - `$urlRouterProvider` instance
+   */
+  this.otherwise = function (rule) {
+    if (isString(rule)) {
+      var redirect = rule;
+      rule = function () { return redirect; };
+    }
+    else if (!isFunction(rule)) throw new Error("'rule' must be a function");
+    otherwise = rule;
+    return this;
+  };
+
+
+  function handleIfMatch($injector, handler, match) {
+    if (!match) return false;
+    var result = $injector.invoke(handler, handler, { $match: match });
+    return isDefined(result) ? result : true;
+  }
+
+  /**
+   * @ngdoc function
+   * @name ui.router.router.$urlRouterProvider#when
+   * @methodOf ui.router.router.$urlRouterProvider
+   *
+   * @description
+   * Registers a handler for a given url matching. if handle is a string, it is
+   * treated as a redirect, and is interpolated according to the syntax of match
+   * (i.e. like `String.replace()` for `RegExp`, or like a `UrlMatcher` pattern otherwise).
+   *
+   * If the handler is a function, it is injectable. It gets invoked if `$location`
+   * matches. You have the option of inject the match object as `$match`.
+   *
+   * The handler can return
+   *
+   * - **falsy** to indicate that the rule didn't match after all, then `$urlRouter`
+   *   will continue trying to find another one that matches.
+   * - **string** which is treated as a redirect and passed to `$location.url()`
+   * - **void** or any **truthy** value tells `$urlRouter` that the url was handled.
+   *
+   * @example
+   * <pre>
+   * var app = angular.module('app', ['ui.router.router']);
+   *
+   * app.config(function ($urlRouterProvider) {
+   *   $urlRouterProvider.when($state.url, function ($match, $stateParams) {
+   *     if ($state.$current.navigable !== state ||
+   *         !equalForKeys($match, $stateParams) {
+   *      $state.transitionTo(state, $match, false);
+   *     }
+   *   });
+   * });
+   * </pre>
+   *
+   * @param {string|object} what The incoming path that you want to redirect.
+   * @param {string|object} handler The path you want to redirect your user to.
+   */
+  this.when = function (what, handler) {
+    var redirect, handlerIsString = isString(handler);
+    if (isString(what)) what = $urlMatcherFactory.compile(what);
+
+    if (!handlerIsString && !isFunction(handler) && !isArray(handler))
+      throw new Error("invalid 'handler' in when()");
+
+    var strategies = {
+      matcher: function (what, handler) {
+        if (handlerIsString) {
+          redirect = $urlMatcherFactory.compile(handler);
+          handler = ['$match', function ($match) { return redirect.format($match); }];
+        }
+        return extend(function ($injector, $location) {
+          return handleIfMatch($injector, handler, what.exec($location.path(), $location.search()));
+        }, {
+          prefix: isString(what.prefix) ? what.prefix : ''
+        });
+      },
+      regex: function (what, handler) {
+        if (what.global || what.sticky) throw new Error("when() RegExp must not be global or sticky");
+
+        if (handlerIsString) {
+          redirect = handler;
+          handler = ['$match', function ($match) { return interpolate(redirect, $match); }];
+        }
+        return extend(function ($injector, $location) {
+          return handleIfMatch($injector, handler, what.exec($location.path()));
+        }, {
+          prefix: regExpPrefix(what)
+        });
+      }
+    };
+
+    var check = { matcher: $urlMatcherFactory.isMatcher(what), regex: what instanceof RegExp };
+
+    for (var n in check) {
+      if (check[n]) return this.rule(strategies[n](what, handler));
+    }
+
+    throw new Error("invalid 'what' in when()");
+  };
+
+  /**
+   * @ngdoc function
+   * @name ui.router.router.$urlRouterProvider#deferIntercept
+   * @methodOf ui.router.router.$urlRouterProvider
+   *
+   * @description
+   * Disables (or enables) deferring location change interception.
+   *
+   * If you wish to customize the behavior of syncing the URL (for example, if you wish to
+   * defer a transition but maintain the current URL), call this method at configuration time.
+   * Then, at run time, call `$urlRouter.listen()` after you have configured your own
+   * `$locationChangeSuccess` event handler.
+   *
+   * @example
+   * <pre>
+   * var app = angular.module('app', ['ui.router.router']);
+   *
+   * app.config(function ($urlRouterProvider) {
+   *
+   *   // Prevent $urlRouter from automatically intercepting URL changes;
+   *   // this allows you to configure custom behavior in between
+   *   // location changes and route synchronization:
+   *   $urlRouterProvider.deferIntercept();
+   *
+   * }).run(function ($rootScope, $urlRouter, UserService) {
+   *
+   *   $rootScope.$on('$locationChangeSuccess', function(e) {
+   *     // UserService is an example service for managing user state
+   *     if (UserService.isLoggedIn()) return;
+   *
+   *     // Prevent $urlRouter's default handler from firing
+   *     e.preventDefault();
+   *
+   *     UserService.handleLogin().then(function() {
+   *       // Once the user has logged in, sync the current URL
+   *       // to the router:
+   *       $urlRouter.sync();
+   *     });
+   *   });
+   *
+   *   // Configures $urlRouter's listener *after* your custom listener
+   *   $urlRouter.listen();
+   * });
+   * </pre>
+   *
+   * @param {boolean} defer Indicates whether to defer location change interception. Passing
+            no parameter is equivalent to `true`.
+   */
+  this.deferIntercept = function (defer) {
+    if (defer === undefined) defer = true;
+    interceptDeferred = defer;
+  };
+
+  /**
+   * @ngdoc object
+   * @name ui.router.router.$urlRouter
+   *
+   * @requires $location
+   * @requires $rootScope
+   * @requires $injector
+   * @requires $browser
+   *
+   * @description
+   *
+   */
+  this.$get = $get;
+  $get.$inject = ['$location', '$rootScope', '$injector', '$browser'];
+  function $get(   $location,   $rootScope,   $injector,   $browser) {
+
+    var baseHref = $browser.baseHref(), location = $location.url(), lastPushedUrl;
+
+    function appendBasePath(url, isHtml5, absolute) {
+      if (baseHref === '/') return url;
+      if (isHtml5) return baseHref.slice(0, -1) + url;
+      if (absolute) return baseHref.slice(1) + url;
+      return url;
+    }
+
+    // TODO: Optimize groups of rules with non-empty prefix into some sort of decision tree
+    function update(evt) {
+      if (evt && evt.defaultPrevented) return;
+      var ignoreUpdate = lastPushedUrl && $location.url() === lastPushedUrl;
+      lastPushedUrl = undefined;
+      if (ignoreUpdate) return true;
+
+      function check(rule) {
+        var handled = rule($injector, $location);
+
+        if (!handled) return false;
+        if (isString(handled)) $location.replace().url(handled);
+        return true;
+      }
+      var n = rules.length, i;
+
+      for (i = 0; i < n; i++) {
+        if (check(rules[i])) return;
+      }
+      // always check otherwise last to allow dynamic updates to the set of rules
+      if (otherwise) check(otherwise);
+    }
+
+    function listen() {
+      listener = listener || $rootScope.$on('$locationChangeSuccess', update);
+      return listener;
+    }
+
+    if (!interceptDeferred) listen();
+
+    return {
+      /**
+       * @ngdoc function
+       * @name ui.router.router.$urlRouter#sync
+       * @methodOf ui.router.router.$urlRouter
+       *
+       * @description
+       * Triggers an update; the same update that happens when the address bar url changes, aka `$locationChangeSuccess`.
+       * This method is useful when you need to use `preventDefault()` on the `$locationChangeSuccess` event,
+       * perform some custom logic (route protection, auth, config, redirection, etc) and then finally proceed
+       * with the transition by calling `$urlRouter.sync()`.
+       *
+       * @example
+       * <pre>
+       * angular.module('app', ['ui.router'])
+       *   .run(function($rootScope, $urlRouter) {
+       *     $rootScope.$on('$locationChangeSuccess', function(evt) {
+       *       // Halt state change from even starting
+       *       evt.preventDefault();
+       *       // Perform custom logic
+       *       var meetsRequirement = ...
+       *       // Continue with the update and state transition if logic allows
+       *       if (meetsRequirement) $urlRouter.sync();
+       *     });
+       * });
+       * </pre>
+       */
+      sync: function() {
+        update();
+      },
+
+      listen: function() {
+        return listen();
+      },
+
+      update: function(read) {
+        if (read) {
+          location = $location.url();
+          return;
+        }
+        if ($location.url() === location) return;
+
+        $location.url(location);
+        $location.replace();
+      },
+
+      push: function(urlMatcher, params, options) {
+        $location.url(urlMatcher.format(params || {}));
+        lastPushedUrl = options && options.$$avoidResync ? $location.url() : undefined;
+        if (options && options.replace) $location.replace();
+      },
+
+      /**
+       * @ngdoc function
+       * @name ui.router.router.$urlRouter#href
+       * @methodOf ui.router.router.$urlRouter
+       *
+       * @description
+       * A URL generation method that returns the compiled URL for a given
+       * {@link ui.router.util.type:UrlMatcher `UrlMatcher`}, populated with the provided parameters.
+       *
+       * @example
+       * <pre>
+       * $bob = $urlRouter.href(new UrlMatcher("/about/:person"), {
+       *   person: "bob"
+       * });
+       * // $bob == "/about/bob";
+       * </pre>
+       *
+       * @param {UrlMatcher} urlMatcher The `UrlMatcher` object which is used as the template of the URL to generate.
+       * @param {object=} params An object of parameter values to fill the matcher's required parameters.
+       * @param {object=} options Options object. The options are:
+       *
+       * - **`absolute`** - {boolean=false},  If true will generate an absolute url, e.g. "http://www.example.com/fullurl".
+       *
+       * @returns {string} Returns the fully compiled URL, or `null` if `params` fail validation against `urlMatcher`
+       */
+      href: function(urlMatcher, params, options) {
+        if (!urlMatcher.validates(params)) return null;
+
+        var isHtml5 = $locationProvider.html5Mode();
+        if (angular.isObject(isHtml5)) {
+          isHtml5 = isHtml5.enabled;
+        }
+        
+        var url = urlMatcher.format(params);
+        options = options || {};
+
+        if (!isHtml5 && url !== null) {
+          url = "#" + $locationProvider.hashPrefix() + url;
+        }
+        url = appendBasePath(url, isHtml5, options.absolute);
+
+        if (!options.absolute || !url) {
+          return url;
+        }
+
+        var slash = (!isHtml5 && url ? '/' : ''), port = $location.port();
+        port = (port === 80 || port === 443 ? '' : ':' + port);
+
+        return [$location.protocol(), '://', $location.host(), port, slash, url].join('');
+      }
+    };
+  }
+}
+
+angular.module('ui.router.router').provider('$urlRouter', $UrlRouterProvider);
+
+/**
+ * @ngdoc object
+ * @name ui.router.state.$stateProvider
+ *
+ * @requires ui.router.router.$urlRouterProvider
+ * @requires ui.router.util.$urlMatcherFactoryProvider
+ *
+ * @description
+ * The new `$stateProvider` works similar to Angular's v1 router, but it focuses purely
+ * on state.
+ *
+ * A state corresponds to a "place" in the application in terms of the overall UI and
+ * navigation. A state describes (via the controller / template / view properties) what
+ * the UI looks like and does at that place.
+ *
+ * States often have things in common, and the primary way of factoring out these
+ * commonalities in this model is via the state hierarchy, i.e. parent/child states aka
+ * nested states.
+ *
+ * The `$stateProvider` provides interfaces to declare these states for your app.
+ */
+$StateProvider.$inject = ['$urlRouterProvider', '$urlMatcherFactoryProvider'];
+function $StateProvider(   $urlRouterProvider,   $urlMatcherFactory) {
+
+  var root, states = {}, $state, queue = {}, abstractKey = 'abstract';
+
+  // Builds state properties from definition passed to registerState()
+  var stateBuilder = {
+
+    // Derive parent state from a hierarchical name only if 'parent' is not explicitly defined.
+    // state.children = [];
+    // if (parent) parent.children.push(state);
+    parent: function(state) {
+      if (isDefined(state.parent) && state.parent) return findState(state.parent);
+      // regex matches any valid composite state name
+      // would match "contact.list" but not "contacts"
+      var compositeName = /^(.+)\.[^.]+$/.exec(state.name);
+      return compositeName ? findState(compositeName[1]) : root;
+    },
+
+    // inherit 'data' from parent and override by own values (if any)
+    data: function(state) {
+      if (state.parent && state.parent.data) {
+        state.data = state.self.data = extend({}, state.parent.data, state.data);
+      }
+      return state.data;
+    },
+
+    // Build a URLMatcher if necessary, either via a relative or absolute URL
+    url: function(state) {
+      var url = state.url, config = { params: state.params || {} };
+
+      if (isString(url)) {
+        if (url.charAt(0) == '^') return $urlMatcherFactory.compile(url.substring(1), config);
+        return (state.parent.navigable || root).url.concat(url, config);
+      }
+
+      if (!url || $urlMatcherFactory.isMatcher(url)) return url;
+      throw new Error("Invalid url '" + url + "' in state '" + state + "'");
+    },
+
+    // Keep track of the closest ancestor state that has a URL (i.e. is navigable)
+    navigable: function(state) {
+      return state.url ? state : (state.parent ? state.parent.navigable : null);
+    },
+
+    // Own parameters for this state. state.url.params is already built at this point. Create and add non-url params
+    ownParams: function(state) {
+      var params = state.url && state.url.params || new $$UMFP.ParamSet();
+      forEach(state.params || {}, function(config, id) {
+        if (!params[id]) params[id] = new $$UMFP.Param(id, null, config, "config");
+      });
+      return params;
+    },
+
+    // Derive parameters for this state and ensure they're a super-set of parent's parameters
+    params: function(state) {
+      return state.parent && state.parent.params ? extend(state.parent.params.$$new(), state.ownParams) : new $$UMFP.ParamSet();
+    },
+
+    // If there is no explicit multi-view configuration, make one up so we don't have
+    // to handle both cases in the view directive later. Note that having an explicit
+    // 'views' property will mean the default unnamed view properties are ignored. This
+    // is also a good time to resolve view names to absolute names, so everything is a
+    // straight lookup at link time.
+    views: function(state) {
+      var views = {};
+
+      forEach(isDefined(state.views) ? state.views : { '': state }, function (view, name) {
+        if (name.indexOf('@') < 0) name += '@' + state.parent.name;
+        views[name] = view;
+      });
+      return views;
+    },
+
+    // Keep a full path from the root down to this state as this is needed for state activation.
+    path: function(state) {
+      return state.parent ? state.parent.path.concat(state) : []; // exclude root from path
+    },
+
+    // Speed up $state.contains() as it's used a lot
+    includes: function(state) {
+      var includes = state.parent ? extend({}, state.parent.includes) : {};
+      includes[state.name] = true;
+      return includes;
+    },
+
+    $delegates: {}
+  };
+
+  function isRelative(stateName) {
+    return stateName.indexOf(".") === 0 || stateName.indexOf("^") === 0;
+  }
+
+  function findState(stateOrName, base) {
+    if (!stateOrName) return undefined;
+
+    var isStr = isString(stateOrName),
+        name  = isStr ? stateOrName : stateOrName.name,
+        path  = isRelative(name);
+
+    if (path) {
+      if (!base) throw new Error("No reference point given for path '"  + name + "'");
+      base = findState(base);
+      
+      var rel = name.split("."), i = 0, pathLength = rel.length, current = base;
+
+      for (; i < pathLength; i++) {
+        if (rel[i] === "" && i === 0) {
+          current = base;
+          continue;
+        }
+        if (rel[i] === "^") {
+          if (!current.parent) throw new Error("Path '" + name + "' not valid for state '" + base.name + "'");
+          current = current.parent;
+          continue;
+        }
+        break;
+      }
+      rel = rel.slice(i).join(".");
+      name = current.name + (current.name && rel ? "." : "") + rel;
+    }
+    var state = states[name];
+
+    if (state && (isStr || (!isStr && (state === stateOrName || state.self === stateOrName)))) {
+      return state;
+    }
+    return undefined;
+  }
+
+  function queueState(parentName, state) {
+    if (!queue[parentName]) {
+      queue[parentName] = [];
+    }
+    queue[parentName].push(state);
+  }
+
+  function flushQueuedChildren(parentName) {
+    var queued = queue[parentName] || [];
+    while(queued.length) {
+      registerState(queued.shift());
+    }
+  }
+
+  function registerState(state) {
+    // Wrap a new object around the state so we can store our private details easily.
+    state = inherit(state, {
+      self: state,
+      resolve: state.resolve || {},
+      toString: function() { return this.name; }
+    });
+
+    var name = state.name;
+    if (!isString(name) || name.indexOf('@') >= 0) throw new Error("State must have a valid name");
+    if (states.hasOwnProperty(name)) throw new Error("State '" + name + "'' is already defined");
+
+    // Get parent name
+    var parentName = (name.indexOf('.') !== -1) ? name.substring(0, name.lastIndexOf('.'))
+        : (isString(state.parent)) ? state.parent
+        : (isObject(state.parent) && isString(state.parent.name)) ? state.parent.name
+        : '';
+
+    // If parent is not registered yet, add state to queue and register later
+    if (parentName && !states[parentName]) {
+      return queueState(parentName, state.self);
+    }
+
+    for (var key in stateBuilder) {
+      if (isFunction(stateBuilder[key])) state[key] = stateBuilder[key](state, stateBuilder.$delegates[key]);
+    }
+    states[name] = state;
+
+    // Register the state in the global state list and with $urlRouter if necessary.
+    if (!state[abstractKey] && state.url) {
+      $urlRouterProvider.when(state.url, ['$match', '$stateParams', function ($match, $stateParams) {
+        if ($state.$current.navigable != state || !equalForKeys($match, $stateParams)) {
+          $state.transitionTo(state, $match, { inherit: true, location: false });
+        }
+      }]);
+    }
+
+    // Register any queued children
+    flushQueuedChildren(name);
+
+    return state;
+  }
+
+  // Checks text to see if it looks like a glob.
+  function isGlob (text) {
+    return text.indexOf('*') > -1;
+  }
+
+  // Returns true if glob matches current $state name.
+  function doesStateMatchGlob (glob) {
+    var globSegments = glob.split('.'),
+        segments = $state.$current.name.split('.');
+
+    //match greedy starts
+    if (globSegments[0] === '**') {
+       segments = segments.slice(indexOf(segments, globSegments[1]));
+       segments.unshift('**');
+    }
+    //match greedy ends
+    if (globSegments[globSegments.length - 1] === '**') {
+       segments.splice(indexOf(segments, globSegments[globSegments.length - 2]) + 1, Number.MAX_VALUE);
+       segments.push('**');
+    }
+
+    if (globSegments.length != segments.length) {
+      return false;
+    }
+
+    //match single stars
+    for (var i = 0, l = globSegments.length; i < l; i++) {
+      if (globSegments[i] === '*') {
+        segments[i] = '*';
+      }
+    }
+
+    return segments.join('') === globSegments.join('');
+  }
+
+
+  // Implicit root state that is always active
+  root = registerState({
+    name: '',
+    url: '^',
+    views: null,
+    'abstract': true
+  });
+  root.navigable = null;
+
+
+  /**
+   * @ngdoc function
+   * @name ui.router.state.$stateProvider#decorator
+   * @methodOf ui.router.state.$stateProvider
+   *
+   * @description
+   * Allows you to extend (carefully) or override (at your own peril) the 
+   * `stateBuilder` object used internally by `$stateProvider`. This can be used 
+   * to add custom functionality to ui-router, for example inferring templateUrl 
+   * based on the state name.
+   *
+   * When passing only a name, it returns the current (original or decorated) builder
+   * function that matches `name`.
+   *
+   * The builder functions that can be decorated are listed below. Though not all
+   * necessarily have a good use case for decoration, that is up to you to decide.
+   *
+   * In addition, users can attach custom decorators, which will generate new 
+   * properties within the state's internal definition. There is currently no clear 
+   * use-case for this beyond accessing internal states (i.e. $state.$current), 
+   * however, expect this to become increasingly relevant as we introduce additional 
+   * meta-programming features.
+   *
+   * **Warning**: Decorators should not be interdependent because the order of 
+   * execution of the builder functions in non-deterministic. Builder functions 
+   * should only be dependent on the state definition object and super function.
+   *
+   *
+   * Existing builder functions and current return values:
+   *
+   * - **parent** `{object}` - returns the parent state object.
+   * - **data** `{object}` - returns state data, including any inherited data that is not
+   *   overridden by own values (if any).
+   * - **url** `{object}` - returns a {@link ui.router.util.type:UrlMatcher UrlMatcher}
+   *   or `null`.
+   * - **navigable** `{object}` - returns closest ancestor state that has a URL (aka is 
+   *   navigable).
+   * - **params** `{object}` - returns an array of state params that are ensured to 
+   *   be a super-set of parent's params.
+   * - **views** `{object}` - returns a views object where each key is an absolute view 
+   *   name (i.e. "viewName@stateName") and each value is the config object 
+   *   (template, controller) for the view. Even when you don't use the views object 
+   *   explicitly on a state config, one is still created for you internally.
+   *   So by decorating this builder function you have access to decorating template 
+   *   and controller properties.
+   * - **ownParams** `{object}` - returns an array of params that belong to the state, 
+   *   not including any params defined by ancestor states.
+   * - **path** `{string}` - returns the full path from the root down to this state. 
+   *   Needed for state activation.
+   * - **includes** `{object}` - returns an object that includes every state that 
+   *   would pass a `$state.includes()` test.
+   *
+   * @example
+   * <pre>
+   * // Override the internal 'views' builder with a function that takes the state
+   * // definition, and a reference to the internal function being overridden:
+   * $stateProvider.decorator('views', function (state, parent) {
+   *   var result = {},
+   *       views = parent(state);
+   *
+   *   angular.forEach(views, function (config, name) {
+   *     var autoName = (state.name + '.' + name).replace('.', '/');
+   *     config.templateUrl = config.templateUrl || '/partials/' + autoName + '.html';
+   *     result[name] = config;
+   *   });
+   *   return result;
+   * });
+   *
+   * $stateProvider.state('home', {
+   *   views: {
+   *     'contact.list': { controller: 'ListController' },
+   *     'contact.item': { controller: 'ItemController' }
+   *   }
+   * });
+   *
+   * // ...
+   *
+   * $state.go('home');
+   * // Auto-populates list and item views with /partials/home/contact/list.html,
+   * // and /partials/home/contact/item.html, respectively.
+   * </pre>
+   *
+   * @param {string} name The name of the builder function to decorate. 
+   * @param {object} func A function that is responsible for decorating the original 
+   * builder function. The function receives two parameters:
+   *
+   *   - `{object}` - state - The state config object.
+   *   - `{object}` - super - The original builder function.
+   *
+   * @return {object} $stateProvider - $stateProvider instance
+   */
+  this.decorator = decorator;
+  function decorator(name, func) {
+    /*jshint validthis: true */
+    if (isString(name) && !isDefined(func)) {
+      return stateBuilder[name];
+    }
+    if (!isFunction(func) || !isString(name)) {
+      return this;
+    }
+    if (stateBuilder[name] && !stateBuilder.$delegates[name]) {
+      stateBuilder.$delegates[name] = stateBuilder[name];
+    }
+    stateBuilder[name] = func;
+    return this;
+  }
+
+  /**
+   * @ngdoc function
+   * @name ui.router.state.$stateProvider#state
+   * @methodOf ui.router.state.$stateProvider
+   *
+   * @description
+   * Registers a state configuration under a given state name. The stateConfig object
+   * has the following acceptable properties.
+   *
+   * @param {string} name A unique state name, e.g. "home", "about", "contacts".
+   * To create a parent/child state use a dot, e.g. "about.sales", "home.newest".
+   * @param {object} stateConfig State configuration object.
+   * @param {string|function=} stateConfig.template
+   * <a id='template'></a>
+   *   html template as a string or a function that returns
+   *   an html template as a string which should be used by the uiView directives. This property 
+   *   takes precedence over templateUrl.
+   *   
+   *   If `template` is a function, it will be called with the following parameters:
+   *
+   *   - {array.&lt;object&gt;} - state parameters extracted from the current $location.path() by
+   *     applying the current state
+   *
+   * <pre>template:
+   *   "<h1>inline template definition</h1>" +
+   *   "<div ui-view></div>"</pre>
+   * <pre>template: function(params) {
+   *       return "<h1>generated template</h1>"; }</pre>
+   * </div>
+   *
+   * @param {string|function=} stateConfig.templateUrl
+   * <a id='templateUrl'></a>
+   *
+   *   path or function that returns a path to an html
+   *   template that should be used by uiView.
+   *   
+   *   If `templateUrl` is a function, it will be called with the following parameters:
+   *
+   *   - {array.&lt;object&gt;} - state parameters extracted from the current $location.path() by 
+   *     applying the current state
+   *
+   * <pre>templateUrl: "home.html"</pre>
+   * <pre>templateUrl: function(params) {
+   *     return myTemplates[params.pageId]; }</pre>
+   *
+   * @param {function=} stateConfig.templateProvider
+   * <a id='templateProvider'></a>
+   *    Provider function that returns HTML content string.
+   * <pre> templateProvider:
+   *       function(MyTemplateService, params) {
+   *         return MyTemplateService.getTemplate(params.pageId);
+   *       }</pre>
+   *
+   * @param {string|function=} stateConfig.controller
+   * <a id='controller'></a>
+   *
+   *  Controller fn that should be associated with newly
+   *   related scope or the name of a registered controller if passed as a string.
+   *   Optionally, the ControllerAs may be declared here.
+   * <pre>controller: "MyRegisteredController"</pre>
+   * <pre>controller:
+   *     "MyRegisteredController as fooCtrl"}</pre>
+   * <pre>controller: function($scope, MyService) {
+   *     $scope.data = MyService.getData(); }</pre>
+   *
+   * @param {function=} stateConfig.controllerProvider
+   * <a id='controllerProvider'></a>
+   *
+   * Injectable provider function that returns the actual controller or string.
+   * <pre>controllerProvider:
+   *   function(MyResolveData) {
+   *     if (MyResolveData.foo)
+   *       return "FooCtrl"
+   *     else if (MyResolveData.bar)
+   *       return "BarCtrl";
+   *     else return function($scope) {
+   *       $scope.baz = "Qux";
+   *     }
+   *   }</pre>
+   *
+   * @param {string=} stateConfig.controllerAs
+   * <a id='controllerAs'></a>
+   * 
+   * A controller alias name. If present the controller will be
+   *   published to scope under the controllerAs name.
+   * <pre>controllerAs: "myCtrl"</pre>
+   *
+   * @param {object=} stateConfig.resolve
+   * <a id='resolve'></a>
+   *
+   * An optional map&lt;string, function&gt; of dependencies which
+   *   should be injected into the controller. If any of these dependencies are promises, 
+   *   the router will wait for them all to be resolved before the controller is instantiated.
+   *   If all the promises are resolved successfully, the $stateChangeSuccess event is fired
+   *   and the values of the resolved promises are injected into any controllers that reference them.
+   *   If any  of the promises are rejected the $stateChangeError event is fired.
+   *
+   *   The map object is:
+   *   
+   *   - key - {string}: name of dependency to be injected into controller
+   *   - factory - {string|function}: If string then it is alias for service. Otherwise if function, 
+   *     it is injected and return value it treated as dependency. If result is a promise, it is 
+   *     resolved before its value is injected into controller.
+   *
+   * <pre>resolve: {
+   *     myResolve1:
+   *       function($http, $stateParams) {
+   *         return $http.get("/api/foos/"+stateParams.fooID);
+   *       }
+   *     }</pre>
+   *
+   * @param {string=} stateConfig.url
+   * <a id='url'></a>
+   *
+   *   A url fragment with optional parameters. When a state is navigated or
+   *   transitioned to, the `$stateParams` service will be populated with any 
+   *   parameters that were passed.
+   *
+   * examples:
+   * <pre>url: "/home"
+   * url: "/users/:userid"
+   * url: "/books/{bookid:[a-zA-Z_-]}"
+   * url: "/books/{categoryid:int}"
+   * url: "/books/{publishername:string}/{categoryid:int}"
+   * url: "/messages?before&after"
+   * url: "/messages?{before:date}&{after:date}"</pre>
+   * url: "/messages/:mailboxid?{before:date}&{after:date}"
+   *
+   * @param {object=} stateConfig.views
+   * <a id='views'></a>
+   * an optional map&lt;string, object&gt; which defined multiple views, or targets views
+   * manually/explicitly.
+   *
+   * Examples:
+   *
+   * Targets three named `ui-view`s in the parent state's template
+   * <pre>views: {
+   *     header: {
+   *       controller: "headerCtrl",
+   *       templateUrl: "header.html"
+   *     }, body: {
+   *       controller: "bodyCtrl",
+   *       templateUrl: "body.html"
+   *     }, footer: {
+   *       controller: "footCtrl",
+   *       templateUrl: "footer.html"
+   *     }
+   *   }</pre>
+   *
+   * Targets named `ui-view="header"` from grandparent state 'top''s template, and named `ui-view="body" from parent state's template.
+   * <pre>views: {
+   *     'header@top': {
+   *       controller: "msgHeaderCtrl",
+   *       templateUrl: "msgHeader.html"
+   *     }, 'body': {
+   *       controller: "messagesCtrl",
+   *       templateUrl: "messages.html"
+   *     }
+   *   }</pre>
+   *
+   * @param {boolean=} [stateConfig.abstract=false]
+   * <a id='abstract'></a>
+   * An abstract state will never be directly activated,
+   *   but can provide inherited properties to its common children states.
+   * <pre>abstract: true</pre>
+   *
+   * @param {function=} stateConfig.onEnter
+   * <a id='onEnter'></a>
+   *
+   * Callback function for when a state is entered. Good way
+   *   to trigger an action or dispatch an event, such as opening a dialog.
+   * If minifying your scripts, make sure to explictly annotate this function,
+   * because it won't be automatically annotated by your build tools.
+   *
+   * <pre>onEnter: function(MyService, $stateParams) {
+   *     MyService.foo($stateParams.myParam);
+   * }</pre>
+   *
+   * @param {function=} stateConfig.onExit
+   * <a id='onExit'></a>
+   *
+   * Callback function for when a state is exited. Good way to
+   *   trigger an action or dispatch an event, such as opening a dialog.
+   * If minifying your scripts, make sure to explictly annotate this function,
+   * because it won't be automatically annotated by your build tools.
+   *
+   * <pre>onExit: function(MyService, $stateParams) {
+   *     MyService.cleanup($stateParams.myParam);
+   * }</pre>
+   *
+   * @param {boolean=} [stateConfig.reloadOnSearch=true]
+   * <a id='reloadOnSearch'></a>
+   *
+   * If `false`, will not retrigger the same state
+   *   just because a search/query parameter has changed (via $location.search() or $location.hash()). 
+   *   Useful for when you'd like to modify $location.search() without triggering a reload.
+   * <pre>reloadOnSearch: false</pre>
+   *
+   * @param {object=} stateConfig.data
+   * <a id='data'></a>
+   *
+   * Arbitrary data object, useful for custom configuration.  The parent state's `data` is
+   *   prototypally inherited.  In other words, adding a data property to a state adds it to
+   *   the entire subtree via prototypal inheritance.
+   *
+   * <pre>data: {
+   *     requiredRole: 'foo'
+   * } </pre>
+   *
+   * @param {object=} stateConfig.params
+   * <a id='params'></a>
+   *
+   * A map which optionally configures parameters declared in the `url`, or
+   *   defines additional non-url parameters.  For each parameter being
+   *   configured, add a configuration object keyed to the name of the parameter.
+   *
+   *   Each parameter configuration object may contain the following properties:
+   *
+   *   - ** value ** - {object|function=}: specifies the default value for this
+   *     parameter.  This implicitly sets this parameter as optional.
+   *
+   *     When UI-Router routes to a state and no value is
+   *     specified for this parameter in the URL or transition, the
+   *     default value will be used instead.  If `value` is a function,
+   *     it will be injected and invoked, and the return value used.
+   *
+   *     *Note*: `undefined` is treated as "no default value" while `null`
+   *     is treated as "the default value is `null`".
+   *
+   *     *Shorthand*: If you only need to configure the default value of the
+   *     parameter, you may use a shorthand syntax.   In the **`params`**
+   *     map, instead mapping the param name to a full parameter configuration
+   *     object, simply set map it to the default parameter value, e.g.:
+   *
+   * <pre>// define a parameter's default value
+   * params: {
+   *     param1: { value: "defaultValue" }
+   * }
+   * // shorthand default values
+   * params: {
+   *     param1: "defaultValue",
+   *     param2: "param2Default"
+   * }</pre>
+   *
+   *   - ** array ** - {boolean=}: *(default: false)* If true, the param value will be
+   *     treated as an array of values.  If you specified a Type, the value will be
+   *     treated as an array of the specified Type.  Note: query parameter values
+   *     default to a special `"auto"` mode.
+   *
+   *     For query parameters in `"auto"` mode, if multiple  values for a single parameter
+   *     are present in the URL (e.g.: `/foo?bar=1&bar=2&bar=3`) then the values
+   *     are mapped to an array (e.g.: `{ foo: [ '1', '2', '3' ] }`).  However, if
+   *     only one value is present (e.g.: `/foo?bar=1`) then the value is treated as single
+   *     value (e.g.: `{ foo: '1' }`).
+   *
+   * <pre>params: {
+   *     param1: { array: true }
+   * }</pre>
+   *
+   *   - ** squash ** - {bool|string=}: `squash` configures how a default parameter value is represented in the URL when
+   *     the current parameter value is the same as the default value. If `squash` is not set, it uses the
+   *     configured default squash policy.
+   *     (See {@link ui.router.util.$urlMatcherFactory#methods_defaultSquashPolicy `defaultSquashPolicy()`})
+   *
+   *   There are three squash settings:
+   *
+   *     - false: The parameter's default value is not squashed.  It is encoded and included in the URL
+   *     - true: The parameter's default value is omitted from the URL.  If the parameter is preceeded and followed
+   *       by slashes in the state's `url` declaration, then one of those slashes are omitted.
+   *       This can allow for cleaner looking URLs.
+   *     - `"<arbitrary string>"`: The parameter's default value is replaced with an arbitrary placeholder of  your choice.
+   *
+   * <pre>params: {
+   *     param1: {
+   *       value: "defaultId",
+   *       squash: true
+   * } }
+   * // squash "defaultValue" to "~"
+   * params: {
+   *     param1: {
+   *       value: "defaultValue",
+   *       squash: "~"
+   * } }
+   * </pre>
+   *
+   *
+   * @example
+   * <pre>
+   * // Some state name examples
+   *
+   * // stateName can be a single top-level name (must be unique).
+   * $stateProvider.state("home", {});
+   *
+   * // Or it can be a nested state name. This state is a child of the
+   * // above "home" state.
+   * $stateProvider.state("home.newest", {});
+   *
+   * // Nest states as deeply as needed.
+   * $stateProvider.state("home.newest.abc.xyz.inception", {});
+   *
+   * // state() returns $stateProvider, so you can chain state declarations.
+   * $stateProvider
+   *   .state("home", {})
+   *   .state("about", {})
+   *   .state("contacts", {});
+   * </pre>
+   *
+   */
+  this.state = state;
+  function state(name, definition) {
+    /*jshint validthis: true */
+    if (isObject(name)) definition = name;
+    else definition.name = name;
+    registerState(definition);
+    return this;
+  }
+
+  /**
+   * @ngdoc object
+   * @name ui.router.state.$state
+   *
+   * @requires $rootScope
+   * @requires $q
+   * @requires ui.router.state.$view
+   * @requires $injector
+   * @requires ui.router.util.$resolve
+   * @requires ui.router.state.$stateParams
+   * @requires ui.router.router.$urlRouter
+   *
+   * @property {object} params A param object, e.g. {sectionId: section.id)}, that 
+   * you'd like to test against the current active state.
+   * @property {object} current A reference to the state's config object. However 
+   * you passed it in. Useful for accessing custom data.
+   * @property {object} transition Currently pending transition. A promise that'll 
+   * resolve or reject.
+   *
+   * @description
+   * `$state` service is responsible for representing states as well as transitioning
+   * between them. It also provides interfaces to ask for current state or even states
+   * you're coming from.
+   */
+  this.$get = $get;
+  $get.$inject = ['$rootScope', '$q', '$view', '$injector', '$resolve', '$stateParams', '$urlRouter', '$location', '$urlMatcherFactory'];
+  function $get(   $rootScope,   $q,   $view,   $injector,   $resolve,   $stateParams,   $urlRouter,   $location,   $urlMatcherFactory) {
+
+    var TransitionSuperseded = $q.reject(new Error('transition superseded'));
+    var TransitionPrevented = $q.reject(new Error('transition prevented'));
+    var TransitionAborted = $q.reject(new Error('transition aborted'));
+    var TransitionFailed = $q.reject(new Error('transition failed'));
+
+    // Handles the case where a state which is the target of a transition is not found, and the user
+    // can optionally retry or defer the transition
+    function handleRedirect(redirect, state, params, options) {
+      /**
+       * @ngdoc event
+       * @name ui.router.state.$state#$stateNotFound
+       * @eventOf ui.router.state.$state
+       * @eventType broadcast on root scope
+       * @description
+       * Fired when a requested state **cannot be found** using the provided state name during transition.
+       * The event is broadcast allowing any handlers a single chance to deal with the error (usually by
+       * lazy-loading the unfound state). A special `unfoundState` object is passed to the listener handler,
+       * you can see its three properties in the example. You can use `event.preventDefault()` to abort the
+       * transition and the promise returned from `go` will be rejected with a `'transition aborted'` value.
+       *
+       * @param {Object} event Event object.
+       * @param {Object} unfoundState Unfound State information. Contains: `to, toParams, options` properties.
+       * @param {State} fromState Current state object.
+       * @param {Object} fromParams Current state params.
+       *
+       * @example
+       *
+       * <pre>
+       * // somewhere, assume lazy.state has not been defined
+       * $state.go("lazy.state", {a:1, b:2}, {inherit:false});
+       *
+       * // somewhere else
+       * $scope.$on('$stateNotFound',
+       * function(event, unfoundState, fromState, fromParams){
+       *     console.log(unfoundState.to); // "lazy.state"
+       *     console.log(unfoundState.toParams); // {a:1, b:2}
+       *     console.log(unfoundState.options); // {inherit:false} + default options
+       * })
+       * </pre>
+       */
+      var evt = $rootScope.$broadcast('$stateNotFound', redirect, state, params);
+
+      if (evt.defaultPrevented) {
+        $urlRouter.update();
+        return TransitionAborted;
+      }
+
+      if (!evt.retry) {
+        return null;
+      }
+
+      // Allow the handler to return a promise to defer state lookup retry
+      if (options.$retry) {
+        $urlRouter.update();
+        return TransitionFailed;
+      }
+      var retryTransition = $state.transition = $q.when(evt.retry);
+
+      retryTransition.then(function() {
+        if (retryTransition !== $state.transition) return TransitionSuperseded;
+        redirect.options.$retry = true;
+        return $state.transitionTo(redirect.to, redirect.toParams, redirect.options);
+      }, function() {
+        return TransitionAborted;
+      });
+      $urlRouter.update();
+
+      return retryTransition;
+    }
+
+    root.locals = { resolve: null, globals: { $stateParams: {} } };
+
+    $state = {
+      params: {},
+      current: root.self,
+      $current: root,
+      transition: null
+    };
+
+    /**
+     * @ngdoc function
+     * @name ui.router.state.$state#reload
+     * @methodOf ui.router.state.$state
+     *
+     * @description
+     * A method that force reloads the current state. All resolves are re-resolved, events are not re-fired, 
+     * and controllers reinstantiated (bug with controllers reinstantiating right now, fixing soon).
+     *
+     * @example
+     * <pre>
+     * var app angular.module('app', ['ui.router']);
+     *
+     * app.controller('ctrl', function ($scope, $state) {
+     *   $scope.reload = function(){
+     *     $state.reload();
+     *   }
+     * });
+     * </pre>
+     *
+     * `reload()` is just an alias for:
+     * <pre>
+     * $state.transitionTo($state.current, $stateParams, { 
+     *   reload: true, inherit: false, notify: true
+     * });
+     * </pre>
+     *
+     * @returns {promise} A promise representing the state of the new transition. See
+     * {@link ui.router.state.$state#methods_go $state.go}.
+     */
+    $state.reload = function reload() {
+      return $state.transitionTo($state.current, $stateParams, { reload: true, inherit: false, notify: true });
+    };
+
+    /**
+     * @ngdoc function
+     * @name ui.router.state.$state#go
+     * @methodOf ui.router.state.$state
+     *
+     * @description
+     * Convenience method for transitioning to a new state. `$state.go` calls 
+     * `$state.transitionTo` internally but automatically sets options to 
+     * `{ location: true, inherit: true, relative: $state.$current, notify: true }`. 
+     * This allows you to easily use an absolute or relative to path and specify 
+     * only the parameters you'd like to update (while letting unspecified parameters 
+     * inherit from the currently active ancestor states).
+     *
+     * @example
+     * <pre>
+     * var app = angular.module('app', ['ui.router']);
+     *
+     * app.controller('ctrl', function ($scope, $state) {
+     *   $scope.changeState = function () {
+     *     $state.go('contact.detail');
+     *   };
+     * });
+     * </pre>
+     * <img src='../ngdoc_assets/StateGoExamples.png'/>
+     *
+     * @param {string} to Absolute state name or relative state path. Some examples:
+     *
+     * - `$state.go('contact.detail')` - will go to the `contact.detail` state
+     * - `$state.go('^')` - will go to a parent state
+     * - `$state.go('^.sibling')` - will go to a sibling state
+     * - `$state.go('.child.grandchild')` - will go to grandchild state
+     *
+     * @param {object=} params A map of the parameters that will be sent to the state, 
+     * will populate $stateParams. Any parameters that are not specified will be inherited from currently 
+     * defined parameters. This allows, for example, going to a sibling state that shares parameters
+     * specified in a parent state. Parameter inheritance only works between common ancestor states, I.e.
+     * transitioning to a sibling will get you the parameters for all parents, transitioning to a child
+     * will get you all current parameters, etc.
+     * @param {object=} options Options object. The options are:
+     *
+     * - **`location`** - {boolean=true|string=} - If `true` will update the url in the location bar, if `false`
+     *    will not. If string, must be `"replace"`, which will update url and also replace last history record.
+     * - **`inherit`** - {boolean=true}, If `true` will inherit url parameters from current url.
+     * - **`relative`** - {object=$state.$current}, When transitioning with relative path (e.g '^'), 
+     *    defines which state to be relative from.
+     * - **`notify`** - {boolean=true}, If `true` will broadcast $stateChangeStart and $stateChangeSuccess events.
+     * - **`reload`** (v0.2.5) - {boolean=false}, If `true` will force transition even if the state or params 
+     *    have not changed, aka a reload of the same state. It differs from reloadOnSearch because you'd
+     *    use this when you want to force a reload when *everything* is the same, including search params.
+     *
+     * @returns {promise} A promise representing the state of the new transition.
+     *
+     * Possible success values:
+     *
+     * - $state.current
+     *
+     * <br/>Possible rejection values:
+     *
+     * - 'transition superseded' - when a newer transition has been started after this one
+     * - 'transition prevented' - when `event.preventDefault()` has been called in a `$stateChangeStart` listener
+     * - 'transition aborted' - when `event.preventDefault()` has been called in a `$stateNotFound` listener or
+     *   when a `$stateNotFound` `event.retry` promise errors.
+     * - 'transition failed' - when a state has been unsuccessfully found after 2 tries.
+     * - *resolve error* - when an error has occurred with a `resolve`
+     *
+     */
+    $state.go = function go(to, params, options) {
+      return $state.transitionTo(to, params, extend({ inherit: true, relative: $state.$current }, options));
+    };
+
+    /**
+     * @ngdoc function
+     * @name ui.router.state.$state#transitionTo
+     * @methodOf ui.router.state.$state
+     *
+     * @description
+     * Low-level method for transitioning to a new state. {@link ui.router.state.$state#methods_go $state.go}
+     * uses `transitionTo` internally. `$state.go` is recommended in most situations.
+     *
+     * @example
+     * <pre>
+     * var app = angular.module('app', ['ui.router']);
+     *
+     * app.controller('ctrl', function ($scope, $state) {
+     *   $scope.changeState = function () {
+     *     $state.transitionTo('contact.detail');
+     *   };
+     * });
+     * </pre>
+     *
+     * @param {string} to State name.
+     * @param {object=} toParams A map of the parameters that will be sent to the state,
+     * will populate $stateParams.
+     * @param {object=} options Options object. The options are:
+     *
+     * - **`location`** - {boolean=true|string=} - If `true` will update the url in the location bar, if `false`
+     *    will not. If string, must be `"replace"`, which will update url and also replace last history record.
+     * - **`inherit`** - {boolean=false}, If `true` will inherit url parameters from current url.
+     * - **`relative`** - {object=}, When transitioning with relative path (e.g '^'), 
+     *    defines which state to be relative from.
+     * - **`notify`** - {boolean=true}, If `true` will broadcast $stateChangeStart and $stateChangeSuccess events.
+     * - **`reload`** (v0.2.5) - {boolean=false}, If `true` will force transition even if the state or params 
+     *    have not changed, aka a reload of the same state. It differs from reloadOnSearch because you'd
+     *    use this when you want to force a reload when *everything* is the same, including search params.
+     *
+     * @returns {promise} A promise representing the state of the new transition. See
+     * {@link ui.router.state.$state#methods_go $state.go}.
+     */
+    $state.transitionTo = function transitionTo(to, toParams, options) {
+      toParams = toParams || {};
+      options = extend({
+        location: true, inherit: false, relative: null, notify: true, reload: false, $retry: false
+      }, options || {});
+
+      var from = $state.$current, fromParams = $state.params, fromPath = from.path;
+      var evt, toState = findState(to, options.relative);
+
+      if (!isDefined(toState)) {
+        var redirect = { to: to, toParams: toParams, options: options };
+        var redirectResult = handleRedirect(redirect, from.self, fromParams, options);
+
+        if (redirectResult) {
+          return redirectResult;
+        }
+
+        // Always retry once if the $stateNotFound was not prevented
+        // (handles either redirect changed or state lazy-definition)
+        to = redirect.to;
+        toParams = redirect.toParams;
+        options = redirect.options;
+        toState = findState(to, options.relative);
+
+        if (!isDefined(toState)) {
+          if (!options.relative) throw new Error("No such state '" + to + "'");
+          throw new Error("Could not resolve '" + to + "' from state '" + options.relative + "'");
+        }
+      }
+      if (toState[abstractKey]) throw new Error("Cannot transition to abstract state '" + to + "'");
+      if (options.inherit) toParams = inheritParams($stateParams, toParams || {}, $state.$current, toState);
+      if (!toState.params.$$validates(toParams)) return TransitionFailed;
+
+      toParams = toState.params.$$values(toParams);
+      to = toState;
+
+      var toPath = to.path;
+
+      // Starting from the root of the path, keep all levels that haven't changed
+      var keep = 0, state = toPath[keep], locals = root.locals, toLocals = [];
+
+      if (!options.reload) {
+        while (state && state === fromPath[keep] && state.ownParams.$$equals(toParams, fromParams)) {
+          locals = toLocals[keep] = state.locals;
+          keep++;
+          state = toPath[keep];
+        }
+      }
+
+      // If we're going to the same state and all locals are kept, we've got nothing to do.
+      // But clear 'transition', as we still want to cancel any other pending transitions.
+      // TODO: We may not want to bump 'transition' if we're called from a location change
+      // that we've initiated ourselves, because we might accidentally abort a legitimate
+      // transition initiated from code?
+      if (shouldTriggerReload(to, from, locals, options)) {
+        if (to.self.reloadOnSearch !== false) $urlRouter.update();
+        $state.transition = null;
+        return $q.when($state.current);
+      }
+
+      // Filter parameters before we pass them to event handlers etc.
+      toParams = filterByKeys(to.params.$$keys(), toParams || {});
+
+      // Broadcast start event and cancel the transition if requested
+      if (options.notify) {
+        /**
+         * @ngdoc event
+         * @name ui.router.state.$state#$stateChangeStart
+         * @eventOf ui.router.state.$state
+         * @eventType broadcast on root scope
+         * @description
+         * Fired when the state transition **begins**. You can use `event.preventDefault()`
+         * to prevent the transition from happening and then the transition promise will be
+         * rejected with a `'transition prevented'` value.
+         *
+         * @param {Object} event Event object.
+         * @param {State} toState The state being transitioned to.
+         * @param {Object} toParams The params supplied to the `toState`.
+         * @param {State} fromState The current state, pre-transition.
+         * @param {Object} fromParams The params supplied to the `fromState`.
+         *
+         * @example
+         *
+         * <pre>
+         * $rootScope.$on('$stateChangeStart',
+         * function(event, toState, toParams, fromState, fromParams){
+         *     event.preventDefault();
+         *     // transitionTo() promise will be rejected with
+         *     // a 'transition prevented' error
+         * })
+         * </pre>
+         */
+        if ($rootScope.$broadcast('$stateChangeStart', to.self, toParams, from.self, fromParams).defaultPrevented) {
+          $urlRouter.update();
+          return TransitionPrevented;
+        }
+      }
+
+      // Resolve locals for the remaining states, but don't update any global state just
+      // yet -- if anything fails to resolve the current state needs to remain untouched.
+      // We also set up an inheritance chain for the locals here. This allows the view directive
+      // to quickly look up the correct definition for each view in the current state. Even
+      // though we create the locals object itself outside resolveState(), it is initially
+      // empty and gets filled asynchronously. We need to keep track of the promise for the
+      // (fully resolved) current locals, and pass this down the chain.
+      var resolved = $q.when(locals);
+
+      for (var l = keep; l < toPath.length; l++, state = toPath[l]) {
+        locals = toLocals[l] = inherit(locals);
+        resolved = resolveState(state, toParams, state === to, resolved, locals, options);
+      }
+
+      // Once everything is resolved, we are ready to perform the actual transition
+      // and return a promise for the new state. We also keep track of what the
+      // current promise is, so that we can detect overlapping transitions and
+      // keep only the outcome of the last transition.
+      var transition = $state.transition = resolved.then(function () {
+        var l, entering, exiting;
+
+        if ($state.transition !== transition) return TransitionSuperseded;
+
+        // Exit 'from' states not kept
+        for (l = fromPath.length - 1; l >= keep; l--) {
+          exiting = fromPath[l];
+          if (exiting.self.onExit) {
+            $injector.invoke(exiting.self.onExit, exiting.self, exiting.locals.globals);
+          }
+          exiting.locals = null;
+        }
+
+        // Enter 'to' states not kept
+        for (l = keep; l < toPath.length; l++) {
+          entering = toPath[l];
+          entering.locals = toLocals[l];
+          if (entering.self.onEnter) {
+            $injector.invoke(entering.self.onEnter, entering.self, entering.locals.globals);
+          }
+        }
+
+        // Run it again, to catch any transitions in callbacks
+        if ($state.transition !== transition) return TransitionSuperseded;
+
+        // Update globals in $state
+        $state.$current = to;
+        $state.current = to.self;
+        $state.params = toParams;
+        copy($state.params, $stateParams);
+        $state.transition = null;
+
+        if (options.location && to.navigable) {
+          $urlRouter.push(to.navigable.url, to.navigable.locals.globals.$stateParams, {
+            $$avoidResync: true, replace: options.location === 'replace'
+          });
+        }
+
+        if (options.notify) {
+        /**
+         * @ngdoc event
+         * @name ui.router.state.$state#$stateChangeSuccess
+         * @eventOf ui.router.state.$state
+         * @eventType broadcast on root scope
+         * @description
+         * Fired once the state transition is **complete**.
+         *
+         * @param {Object} event Event object.
+         * @param {State} toState The state being transitioned to.
+         * @param {Object} toParams The params supplied to the `toState`.
+         * @param {State} fromState The current state, pre-transition.
+         * @param {Object} fromParams The params supplied to the `fromState`.
+         */
+          $rootScope.$broadcast('$stateChangeSuccess', to.self, toParams, from.self, fromParams);
+        }
+        $urlRouter.update(true);
+
+        return $state.current;
+      }, function (error) {
+        if ($state.transition !== transition) return TransitionSuperseded;
+
+        $state.transition = null;
+        /**
+         * @ngdoc event
+         * @name ui.router.state.$state#$stateChangeError
+         * @eventOf ui.router.state.$state
+         * @eventType broadcast on root scope
+         * @description
+         * Fired when an **error occurs** during transition. It's important to note that if you
+         * have any errors in your resolve functions (javascript errors, non-existent services, etc)
+         * they will not throw traditionally. You must listen for this $stateChangeError event to
+         * catch **ALL** errors.
+         *
+         * @param {Object} event Event object.
+         * @param {State} toState The state being transitioned to.
+         * @param {Object} toParams The params supplied to the `toState`.
+         * @param {State} fromState The current state, pre-transition.
+         * @param {Object} fromParams The params supplied to the `fromState`.
+         * @param {Error} error The resolve error object.
+         */
+        evt = $rootScope.$broadcast('$stateChangeError', to.self, toParams, from.self, fromParams, error);
+
+        if (!evt.defaultPrevented) {
+            $urlRouter.update();
+        }
+
+        return $q.reject(error);
+      });
+
+      return transition;
+    };
+
+    /**
+     * @ngdoc function
+     * @name ui.router.state.$state#is
+     * @methodOf ui.router.state.$state
+     *
+     * @description
+     * Similar to {@link ui.router.state.$state#methods_includes $state.includes},
+     * but only checks for the full state name. If params is supplied then it will be
+     * tested for strict equality against the current active params object, so all params
+     * must match with none missing and no extras.
+     *
+     * @example
+     * <pre>
+     * $state.$current.name = 'contacts.details.item';
+     *
+     * // absolute name
+     * $state.is('contact.details.item'); // returns true
+     * $state.is(contactDetailItemStateObject); // returns true
+     *
+     * // relative name (. and ^), typically from a template
+     * // E.g. from the 'contacts.details' template
+     * <div ng-class="{highlighted: $state.is('.item')}">Item</div>
+     * </pre>
+     *
+     * @param {string|object} stateOrName The state name (absolute or relative) or state object you'd like to check.
+     * @param {object=} params A param object, e.g. `{sectionId: section.id}`, that you'd like
+     * to test against the current active state.
+     * @param {object=} options An options object.  The options are:
+     *
+     * - **`relative`** - {string|object} -  If `stateOrName` is a relative state name and `options.relative` is set, .is will
+     * test relative to `options.relative` state (or name).
+     *
+     * @returns {boolean} Returns true if it is the state.
+     */
+    $state.is = function is(stateOrName, params, options) {
+      options = extend({ relative: $state.$current }, options || {});
+      var state = findState(stateOrName, options.relative);
+
+      if (!isDefined(state)) { return undefined; }
+      if ($state.$current !== state) { return false; }
+      return params ? equalForKeys(state.params.$$values(params), $stateParams) : true;
+    };
+
+    /**
+     * @ngdoc function
+     * @name ui.router.state.$state#includes
+     * @methodOf ui.router.state.$state
+     *
+     * @description
+     * A method to determine if the current active state is equal to or is the child of the
+     * state stateName. If any params are passed then they will be tested for a match as well.
+     * Not all the parameters need to be passed, just the ones you'd like to test for equality.
+     *
+     * @example
+     * Partial and relative names
+     * <pre>
+     * $state.$current.name = 'contacts.details.item';
+     *
+     * // Using partial names
+     * $state.includes("contacts"); // returns true
+     * $state.includes("contacts.details"); // returns true
+     * $state.includes("contacts.details.item"); // returns true
+     * $state.includes("contacts.list"); // returns false
+     * $state.includes("about"); // returns false
+     *
+     * // Using relative names (. and ^), typically from a template
+     * // E.g. from the 'contacts.details' template
+     * <div ng-class="{highlighted: $state.includes('.item')}">Item</div>
+     * </pre>
+     *
+     * Basic globbing patterns
+     * <pre>
+     * $state.$current.name = 'contacts.details.item.url';
+     *
+     * $state.includes("*.details.*.*"); // returns true
+     * $state.includes("*.details.**"); // returns true
+     * $state.includes("**.item.**"); // returns true
+     * $state.includes("*.details.item.url"); // returns true
+     * $state.includes("*.details.*.url"); // returns true
+     * $state.includes("*.details.*"); // returns false
+     * $state.includes("item.**"); // returns false
+     * </pre>
+     *
+     * @param {string} stateOrName A partial name, relative name, or glob pattern
+     * to be searched for within the current state name.
+     * @param {object=} params A param object, e.g. `{sectionId: section.id}`,
+     * that you'd like to test against the current active state.
+     * @param {object=} options An options object.  The options are:
+     *
+     * - **`relative`** - {string|object=} -  If `stateOrName` is a relative state reference and `options.relative` is set,
+     * .includes will test relative to `options.relative` state (or name).
+     *
+     * @returns {boolean} Returns true if it does include the state
+     */
+    $state.includes = function includes(stateOrName, params, options) {
+      options = extend({ relative: $state.$current }, options || {});
+      if (isString(stateOrName) && isGlob(stateOrName)) {
+        if (!doesStateMatchGlob(stateOrName)) {
+          return false;
+        }
+        stateOrName = $state.$current.name;
+      }
+
+      var state = findState(stateOrName, options.relative);
+      if (!isDefined(state)) { return undefined; }
+      if (!isDefined($state.$current.includes[state.name])) { return false; }
+      return params ? equalForKeys(state.params.$$values(params), $stateParams, objectKeys(params)) : true;
+    };
+
+
+    /**
+     * @ngdoc function
+     * @name ui.router.state.$state#href
+     * @methodOf ui.router.state.$state
+     *
+     * @description
+     * A url generation method that returns the compiled url for the given state populated with the given params.
+     *
+     * @example
+     * <pre>
+     * expect($state.href("about.person", { person: "bob" })).toEqual("/about/bob");
+     * </pre>
+     *
+     * @param {string|object} stateOrName The state name or state object you'd like to generate a url from.
+     * @param {object=} params An object of parameter values to fill the state's required parameters.
+     * @param {object=} options Options object. The options are:
+     *
+     * - **`lossy`** - {boolean=true} -  If true, and if there is no url associated with the state provided in the
+     *    first parameter, then the constructed href url will be built from the first navigable ancestor (aka
+     *    ancestor with a valid url).
+     * - **`inherit`** - {boolean=true}, If `true` will inherit url parameters from current url.
+     * - **`relative`** - {object=$state.$current}, When transitioning with relative path (e.g '^'), 
+     *    defines which state to be relative from.
+     * - **`absolute`** - {boolean=false},  If true will generate an absolute url, e.g. "http://www.example.com/fullurl".
+     * 
+     * @returns {string} compiled state url
+     */
+    $state.href = function href(stateOrName, params, options) {
+      options = extend({
+        lossy:    true,
+        inherit:  true,
+        absolute: false,
+        relative: $state.$current
+      }, options || {});
+
+      var state = findState(stateOrName, options.relative);
+
+      if (!isDefined(state)) return null;
+      if (options.inherit) params = inheritParams($stateParams, params || {}, $state.$current, state);
+      
+      var nav = (state && options.lossy) ? state.navigable : state;
+
+      if (!nav || nav.url === undefined || nav.url === null) {
+        return null;
+      }
+      return $urlRouter.href(nav.url, filterByKeys(state.params.$$keys(), params || {}), {
+        absolute: options.absolute
+      });
+    };
+
+    /**
+     * @ngdoc function
+     * @name ui.router.state.$state#get
+     * @methodOf ui.router.state.$state
+     *
+     * @description
+     * Returns the state configuration object for any specific state or all states.
+     *
+     * @param {string|object=} stateOrName (absolute or relative) If provided, will only get the config for
+     * the requested state. If not provided, returns an array of ALL state configs.
+     * @param {string|object=} context When stateOrName is a relative state reference, the state will be retrieved relative to context.
+     * @returns {Object|Array} State configuration object or array of all objects.
+     */
+    $state.get = function (stateOrName, context) {
+      if (arguments.length === 0) return map(objectKeys(states), function(name) { return states[name].self; });
+      var state = findState(stateOrName, context || $state.$current);
+      return (state && state.self) ? state.self : null;
+    };
+
+    function resolveState(state, params, paramsAreFiltered, inherited, dst, options) {
+      // Make a restricted $stateParams with only the parameters that apply to this state if
+      // necessary. In addition to being available to the controller and onEnter/onExit callbacks,
+      // we also need $stateParams to be available for any $injector calls we make during the
+      // dependency resolution process.
+      var $stateParams = (paramsAreFiltered) ? params : filterByKeys(state.params.$$keys(), params);
+      var locals = { $stateParams: $stateParams };
+
+      // Resolve 'global' dependencies for the state, i.e. those not specific to a view.
+      // We're also including $stateParams in this; that way the parameters are restricted
+      // to the set that should be visible to the state, and are independent of when we update
+      // the global $state and $stateParams values.
+      dst.resolve = $resolve.resolve(state.resolve, locals, dst.resolve, state);
+      var promises = [dst.resolve.then(function (globals) {
+        dst.globals = globals;
+      })];
+      if (inherited) promises.push(inherited);
+
+      // Resolve template and dependencies for all views.
+      forEach(state.views, function (view, name) {
+        var injectables = (view.resolve && view.resolve !== state.resolve ? view.resolve : {});
+        injectables.$template = [ function () {
+          return $view.load(name, { view: view, locals: locals, params: $stateParams, notify: options.notify }) || '';
+        }];
+
+        promises.push($resolve.resolve(injectables, locals, dst.resolve, state).then(function (result) {
+          // References to the controller (only instantiated at link time)
+          if (isFunction(view.controllerProvider) || isArray(view.controllerProvider)) {
+            var injectLocals = angular.extend({}, injectables, locals);
+            result.$$controller = $injector.invoke(view.controllerProvider, null, injectLocals);
+          } else {
+            result.$$controller = view.controller;
+          }
+          // Provide access to the state itself for internal use
+          result.$$state = state;
+          result.$$controllerAs = view.controllerAs;
+          dst[name] = result;
+        }));
+      });
+
+      // Wait for all the promises and then return the activation object
+      return $q.all(promises).then(function (values) {
+        return dst;
+      });
+    }
+
+    return $state;
+  }
+
+  function shouldTriggerReload(to, from, locals, options) {
+    if (to === from && ((locals === from.locals && !options.reload) || (to.self.reloadOnSearch === false))) {
+      return true;
+    }
+  }
+}
+
+angular.module('ui.router.state')
+  .value('$stateParams', {})
+  .provider('$state', $StateProvider);
+
+
+$ViewProvider.$inject = [];
+function $ViewProvider() {
+
+  this.$get = $get;
+  /**
+   * @ngdoc object
+   * @name ui.router.state.$view
+   *
+   * @requires ui.router.util.$templateFactory
+   * @requires $rootScope
+   *
+   * @description
+   *
+   */
+  $get.$inject = ['$rootScope', '$templateFactory'];
+  function $get(   $rootScope,   $templateFactory) {
+    return {
+      // $view.load('full.viewName', { template: ..., controller: ..., resolve: ..., async: false, params: ... })
+      /**
+       * @ngdoc function
+       * @name ui.router.state.$view#load
+       * @methodOf ui.router.state.$view
+       *
+       * @description
+       *
+       * @param {string} name name
+       * @param {object} options option object.
+       */
+      load: function load(name, options) {
+        var result, defaults = {
+          template: null, controller: null, view: null, locals: null, notify: true, async: true, params: {}
+        };
+        options = extend(defaults, options);
+
+        if (options.view) {
+          result = $templateFactory.fromConfig(options.view, options.params, options.locals);
+        }
+        if (result && options.notify) {
+        /**
+         * @ngdoc event
+         * @name ui.router.state.$state#$viewContentLoading
+         * @eventOf ui.router.state.$view
+         * @eventType broadcast on root scope
+         * @description
+         *
+         * Fired once the view **begins loading**, *before* the DOM is rendered.
+         *
+         * @param {Object} event Event object.
+         * @param {Object} viewConfig The view config properties (template, controller, etc).
+         *
+         * @example
+         *
+         * <pre>
+         * $scope.$on('$viewContentLoading',
+         * function(event, viewConfig){
+         *     // Access to all the view config properties.
+         *     // and one special property 'targetView'
+         *     // viewConfig.targetView
+         * });
+         * </pre>
+         */
+          $rootScope.$broadcast('$viewContentLoading', options);
+        }
+        return result;
+      }
+    };
+  }
+}
+
+angular.module('ui.router.state').provider('$view', $ViewProvider);
+
+/**
+ * @ngdoc object
+ * @name ui.router.state.$uiViewScrollProvider
+ *
+ * @description
+ * Provider that returns the {@link ui.router.state.$uiViewScroll} service function.
+ */
+function $ViewScrollProvider() {
+
+  var useAnchorScroll = false;
+
+  /**
+   * @ngdoc function
+   * @name ui.router.state.$uiViewScrollProvider#useAnchorScroll
+   * @methodOf ui.router.state.$uiViewScrollProvider
+   *
+   * @description
+   * Reverts back to using the core [`$anchorScroll`](http://docs.angularjs.org/api/ng.$anchorScroll) service for
+   * scrolling based on the url anchor.
+   */
+  this.useAnchorScroll = function () {
+    useAnchorScroll = true;
+  };
+
+  /**
+   * @ngdoc object
+   * @name ui.router.state.$uiViewScroll
+   *
+   * @requires $anchorScroll
+   * @requires $timeout
+   *
+   * @description
+   * When called with a jqLite element, it scrolls the element into view (after a
+   * `$timeout` so the DOM has time to refresh).
+   *
+   * If you prefer to rely on `$anchorScroll` to scroll the view to the anchor,
+   * this can be enabled by calling {@link ui.router.state.$uiViewScrollProvider#methods_useAnchorScroll `$uiViewScrollProvider.useAnchorScroll()`}.
+   */
+  this.$get = ['$anchorScroll', '$timeout', function ($anchorScroll, $timeout) {
+    if (useAnchorScroll) {
+      return $anchorScroll;
+    }
+
+    return function ($element) {
+      $timeout(function () {
+        $element[0].scrollIntoView();
+      }, 0, false);
+    };
+  }];
+}
+
+angular.module('ui.router.state').provider('$uiViewScroll', $ViewScrollProvider);
+
+/**
+ * @ngdoc directive
+ * @name ui.router.state.directive:ui-view
+ *
+ * @requires ui.router.state.$state
+ * @requires $compile
+ * @requires $controller
+ * @requires $injector
+ * @requires ui.router.state.$uiViewScroll
+ * @requires $document
+ *
+ * @restrict ECA
+ *
+ * @description
+ * The ui-view directive tells $state where to place your templates.
+ *
+ * @param {string=} name A view name. The name should be unique amongst the other views in the
+ * same state. You can have views of the same name that live in different states.
+ *
+ * @param {string=} autoscroll It allows you to set the scroll behavior of the browser window
+ * when a view is populated. By default, $anchorScroll is overridden by ui-router's custom scroll
+ * service, {@link ui.router.state.$uiViewScroll}. This custom service let's you
+ * scroll ui-view elements into view when they are populated during a state activation.
+ *
+ * *Note: To revert back to old [`$anchorScroll`](http://docs.angularjs.org/api/ng.$anchorScroll)
+ * functionality, call `$uiViewScrollProvider.useAnchorScroll()`.*
+ *
+ * @param {string=} onload Expression to evaluate whenever the view updates.
+ * 
+ * @example
+ * A view can be unnamed or named. 
+ * <pre>
+ * <!-- Unnamed -->
+ * <div ui-view></div> 
+ * 
+ * <!-- Named -->
+ * <div ui-view="viewName"></div>
+ * </pre>
+ *
+ * You can only have one unnamed view within any template (or root html). If you are only using a 
+ * single view and it is unnamed then you can populate it like so:
+ * <pre>
+ * <div ui-view></div> 
+ * $stateProvider.state("home", {
+ *   template: "<h1>HELLO!</h1>"
+ * })
+ * </pre>
+ * 
+ * The above is a convenient shortcut equivalent to specifying your view explicitly with the {@link ui.router.state.$stateProvider#views `views`}
+ * config property, by name, in this case an empty name:
+ * <pre>
+ * $stateProvider.state("home", {
+ *   views: {
+ *     "": {
+ *       template: "<h1>HELLO!</h1>"
+ *     }
+ *   }    
+ * })
+ * </pre>
+ * 
+ * But typically you'll only use the views property if you name your view or have more than one view 
+ * in the same template. There's not really a compelling reason to name a view if its the only one, 
+ * but you could if you wanted, like so:
+ * <pre>
+ * <div ui-view="main"></div>
+ * </pre> 
+ * <pre>
+ * $stateProvider.state("home", {
+ *   views: {
+ *     "main": {
+ *       template: "<h1>HELLO!</h1>"
+ *     }
+ *   }    
+ * })
+ * </pre>
+ * 
+ * Really though, you'll use views to set up multiple views:
+ * <pre>
+ * <div ui-view></div>
+ * <div ui-view="chart"></div> 
+ * <div ui-view="data"></div> 
+ * </pre>
+ * 
+ * <pre>
+ * $stateProvider.state("home", {
+ *   views: {
+ *     "": {
+ *       template: "<h1>HELLO!</h1>"
+ *     },
+ *     "chart": {
+ *       template: "<chart_thing/>"
+ *     },
+ *     "data": {
+ *       template: "<data_thing/>"
+ *     }
+ *   }    
+ * })
+ * </pre>
+ *
+ * Examples for `autoscroll`:
+ *
+ * <pre>
+ * <!-- If autoscroll present with no expression,
+ *      then scroll ui-view into view -->
+ * <ui-view autoscroll/>
+ *
+ * <!-- If autoscroll present with valid expression,
+ *      then scroll ui-view into view if expression evaluates to true -->
+ * <ui-view autoscroll='true'/>
+ * <ui-view autoscroll='false'/>
+ * <ui-view autoscroll='scopeVariable'/>
+ * </pre>
+ */
+$ViewDirective.$inject = ['$state', '$injector', '$uiViewScroll', '$interpolate'];
+function $ViewDirective(   $state,   $injector,   $uiViewScroll,   $interpolate) {
+
+  function getService() {
+    return ($injector.has) ? function(service) {
+      return $injector.has(service) ? $injector.get(service) : null;
+    } : function(service) {
+      try {
+        return $injector.get(service);
+      } catch (e) {
+        return null;
+      }
+    };
+  }
+
+  var service = getService(),
+      $animator = service('$animator'),
+      $animate = service('$animate');
+
+  // Returns a set of DOM manipulation functions based on which Angular version
+  // it should use
+  function getRenderer(attrs, scope) {
+    var statics = function() {
+      return {
+        enter: function (element, target, cb) { target.after(element); cb(); },
+        leave: function (element, cb) { element.remove(); cb(); }
+      };
+    };
+
+    if ($animate) {
+      return {
+        enter: function(element, target, cb) {
+          var promise = $animate.enter(element, null, target, cb);
+          if (promise && promise.then) promise.then(cb);
+        },
+        leave: function(element, cb) {
+          var promise = $animate.leave(element, cb);
+          if (promise && promise.then) promise.then(cb);
+        }
+      };
+    }
+
+    if ($animator) {
+      var animate = $animator && $animator(scope, attrs);
+
+      return {
+        enter: function(element, target, cb) {animate.enter(element, null, target); cb(); },
+        leave: function(element, cb) { animate.leave(element); cb(); }
+      };
+    }
+
+    return statics();
+  }
+
+  var directive = {
+    restrict: 'ECA',
+    terminal: true,
+    priority: 400,
+    transclude: 'element',
+    compile: function (tElement, tAttrs, $transclude) {
+      return function (scope, $element, attrs) {
+        var previousEl, currentEl, currentScope, latestLocals,
+            onloadExp     = attrs.onload || '',
+            autoScrollExp = attrs.autoscroll,
+            renderer      = getRenderer(attrs, scope);
+
+        scope.$on('$stateChangeSuccess', function() {
+          updateView(false);
+        });
+        scope.$on('$viewContentLoading', function() {
+          updateView(false);
+        });
+
+        updateView(true);
+
+        function cleanupLastView() {
+          if (previousEl) {
+            previousEl.remove();
+            previousEl = null;
+          }
+
+          if (currentScope) {
+            currentScope.$destroy();
+            currentScope = null;
+          }
+
+          if (currentEl) {
+            renderer.leave(currentEl, function() {
+              previousEl = null;
+            });
+
+            previousEl = currentEl;
+            currentEl = null;
+          }
+        }
+
+        function updateView(firstTime) {
+          var newScope,
+              name            = getUiViewName(scope, attrs, $element, $interpolate),
+              previousLocals  = name && $state.$current && $state.$current.locals[name];
+
+          if (!firstTime && previousLocals === latestLocals) return; // nothing to do
+          newScope = scope.$new();
+          latestLocals = $state.$current.locals[name];
+
+          var clone = $transclude(newScope, function(clone) {
+            renderer.enter(clone, $element, function onUiViewEnter() {
+              if(currentScope) {
+                currentScope.$emit('$viewContentAnimationEnded');
+              }
+
+              if (angular.isDefined(autoScrollExp) && !autoScrollExp || scope.$eval(autoScrollExp)) {
+                $uiViewScroll(clone);
+              }
+            });
+            cleanupLastView();
+          });
+
+          currentEl = clone;
+          currentScope = newScope;
+          /**
+           * @ngdoc event
+           * @name ui.router.state.directive:ui-view#$viewContentLoaded
+           * @eventOf ui.router.state.directive:ui-view
+           * @eventType emits on ui-view directive scope
+           * @description           *
+           * Fired once the view is **loaded**, *after* the DOM is rendered.
+           *
+           * @param {Object} event Event object.
+           */
+          currentScope.$emit('$viewContentLoaded');
+          currentScope.$eval(onloadExp);
+        }
+      };
+    }
+  };
+
+  return directive;
+}
+
+$ViewDirectiveFill.$inject = ['$compile', '$controller', '$state', '$interpolate'];
+function $ViewDirectiveFill (  $compile,   $controller,   $state,   $interpolate) {
+  return {
+    restrict: 'ECA',
+    priority: -400,
+    compile: function (tElement) {
+      var initial = tElement.html();
+      return function (scope, $element, attrs) {
+        var current = $state.$current,
+            name = getUiViewName(scope, attrs, $element, $interpolate),
+            locals  = current && current.locals[name];
+
+        if (! locals) {
+          return;
+        }
+
+        $element.data('$uiView', { name: name, state: locals.$$state });
+        $element.html(locals.$template ? locals.$template : initial);
+
+        var link = $compile($element.contents());
+
+        if (locals.$$controller) {
+          locals.$scope = scope;
+          var controller = $controller(locals.$$controller, locals);
+          if (locals.$$controllerAs) {
+            scope[locals.$$controllerAs] = controller;
+          }
+          $element.data('$ngControllerController', controller);
+          $element.children().data('$ngControllerController', controller);
+        }
+
+        link(scope);
+      };
+    }
+  };
+}
+
+/**
+ * Shared ui-view code for both directives:
+ * Given scope, element, and its attributes, return the view's name
+ */
+function getUiViewName(scope, attrs, element, $interpolate) {
+  var name = $interpolate(attrs.uiView || attrs.name || '')(scope);
+  var inherited = element.inheritedData('$uiView');
+  return name.indexOf('@') >= 0 ?  name :  (name + '@' + (inherited ? inherited.state.name : ''));
+}
+
+angular.module('ui.router.state').directive('uiView', $ViewDirective);
+angular.module('ui.router.state').directive('uiView', $ViewDirectiveFill);
+
+function parseStateRef(ref, current) {
+  var preparsed = ref.match(/^\s*({[^}]*})\s*$/), parsed;
+  if (preparsed) ref = current + '(' + preparsed[1] + ')';
+  parsed = ref.replace(/\n/g, " ").match(/^([^(]+?)\s*(\((.*)\))?$/);
+  if (!parsed || parsed.length !== 4) throw new Error("Invalid state ref '" + ref + "'");
+  return { state: parsed[1], paramExpr: parsed[3] || null };
+}
+
+function stateContext(el) {
+  var stateData = el.parent().inheritedData('$uiView');
+
+  if (stateData && stateData.state && stateData.state.name) {
+    return stateData.state;
+  }
+}
+
+/**
+ * @ngdoc directive
+ * @name ui.router.state.directive:ui-sref
+ *
+ * @requires ui.router.state.$state
+ * @requires $timeout
+ *
+ * @restrict A
+ *
+ * @description
+ * A directive that binds a link (`<a>` tag) to a state. If the state has an associated 
+ * URL, the directive will automatically generate & update the `href` attribute via 
+ * the {@link ui.router.state.$state#methods_href $state.href()} method. Clicking 
+ * the link will trigger a state transition with optional parameters. 
+ *
+ * Also middle-clicking, right-clicking, and ctrl-clicking on the link will be 
+ * handled natively by the browser.
+ *
+ * You can also use relative state paths within ui-sref, just like the relative 
+ * paths passed to `$state.go()`. You just need to be aware that the path is relative
+ * to the state that the link lives in, in other words the state that loaded the 
+ * template containing the link.
+ *
+ * You can specify options to pass to {@link ui.router.state.$state#go $state.go()}
+ * using the `ui-sref-opts` attribute. Options are restricted to `location`, `inherit`,
+ * and `reload`.
+ *
+ * @example
+ * Here's an example of how you'd use ui-sref and how it would compile. If you have the 
+ * following template:
+ * <pre>
+ * <a ui-sref="home">Home</a> | <a ui-sref="about">About</a> | <a ui-sref="{page: 2}">Next page</a>
+ * 
+ * <ul>
+ *     <li ng-repeat="contact in contacts">
+ *         <a ui-sref="contacts.detail({ id: contact.id })">{{ contact.name }}</a>
+ *     </li>
+ * </ul>
+ * </pre>
+ * 
+ * Then the compiled html would be (assuming Html5Mode is off and current state is contacts):
+ * <pre>
+ * <a href="#/home" ui-sref="home">Home</a> | <a href="#/about" ui-sref="about">About</a> | <a href="#/contacts?page=2" ui-sref="{page: 2}">Next page</a>
+ * 
+ * <ul>
+ *     <li ng-repeat="contact in contacts">
+ *         <a href="#/contacts/1" ui-sref="contacts.detail({ id: contact.id })">Joe</a>
+ *     </li>
+ *     <li ng-repeat="contact in contacts">
+ *         <a href="#/contacts/2" ui-sref="contacts.detail({ id: contact.id })">Alice</a>
+ *     </li>
+ *     <li ng-repeat="contact in contacts">
+ *         <a href="#/contacts/3" ui-sref="contacts.detail({ id: contact.id })">Bob</a>
+ *     </li>
+ * </ul>
+ *
+ * <a ui-sref="home" ui-sref-opts="{reload: true}">Home</a>
+ * </pre>
+ *
+ * @param {string} ui-sref 'stateName' can be any valid absolute or relative state
+ * @param {Object} ui-sref-opts options to pass to {@link ui.router.state.$state#go $state.go()}
+ */
+$StateRefDirective.$inject = ['$state', '$timeout'];
+function $StateRefDirective($state, $timeout) {
+  var allowedOptions = ['location', 'inherit', 'reload'];
+
+  return {
+    restrict: 'A',
+    require: ['?^uiSrefActive', '?^uiSrefActiveEq'],
+    link: function(scope, element, attrs, uiSrefActive) {
+      var ref = parseStateRef(attrs.uiSref, $state.current.name);
+      var params = null, url = null, base = stateContext(element) || $state.$current;
+      var newHref = null, isAnchor = element.prop("tagName") === "A";
+      var isForm = element[0].nodeName === "FORM";
+      var attr = isForm ? "action" : "href", nav = true;
+
+      var options = { relative: base, inherit: true };
+      var optionsOverride = scope.$eval(attrs.uiSrefOpts) || {};
+
+      angular.forEach(allowedOptions, function(option) {
+        if (option in optionsOverride) {
+          options[option] = optionsOverride[option];
+        }
+      });
+
+      var update = function(newVal) {
+        if (newVal) params = angular.copy(newVal);
+        if (!nav) return;
+
+        newHref = $state.href(ref.state, params, options);
+
+        var activeDirective = uiSrefActive[1] || uiSrefActive[0];
+        if (activeDirective) {
+          activeDirective.$$setStateInfo(ref.state, params);
+        }
+        if (newHref === null) {
+          nav = false;
+          return false;
+        }
+        attrs.$set(attr, newHref);
+      };
+
+      if (ref.paramExpr) {
+        scope.$watch(ref.paramExpr, function(newVal, oldVal) {
+          if (newVal !== params) update(newVal);
+        }, true);
+        params = angular.copy(scope.$eval(ref.paramExpr));
+      }
+      update();
+
+      if (isForm) return;
+
+      element.bind("click", function(e) {
+        var button = e.which || e.button;
+        if ( !(button > 1 || e.ctrlKey || e.metaKey || e.shiftKey || element.attr('target')) ) {
+          // HACK: This is to allow ng-clicks to be processed before the transition is initiated:
+          var transition = $timeout(function() {
+            $state.go(ref.state, params, options);
+          });
+          e.preventDefault();
+
+          // if the state has no URL, ignore one preventDefault from the <a> directive.
+          var ignorePreventDefaultCount = isAnchor && !newHref ? 1: 0;
+          e.preventDefault = function() {
+            if (ignorePreventDefaultCount-- <= 0)
+              $timeout.cancel(transition);
+          };
+        }
+      });
+    }
+  };
+}
+
+/**
+ * @ngdoc directive
+ * @name ui.router.state.directive:ui-sref-active
+ *
+ * @requires ui.router.state.$state
+ * @requires ui.router.state.$stateParams
+ * @requires $interpolate
+ *
+ * @restrict A
+ *
+ * @description
+ * A directive working alongside ui-sref to add classes to an element when the
+ * related ui-sref directive's state is active, and removing them when it is inactive.
+ * The primary use-case is to simplify the special appearance of navigation menus
+ * relying on `ui-sref`, by having the "active" state's menu button appear different,
+ * distinguishing it from the inactive menu items.
+ *
+ * ui-sref-active can live on the same element as ui-sref or on a parent element. The first
+ * ui-sref-active found at the same level or above the ui-sref will be used.
+ *
+ * Will activate when the ui-sref's target state or any child state is active. If you
+ * need to activate only when the ui-sref target state is active and *not* any of
+ * it's children, then you will use
+ * {@link ui.router.state.directive:ui-sref-active-eq ui-sref-active-eq}
+ *
+ * @example
+ * Given the following template:
+ * <pre>
+ * <ul>
+ *   <li ui-sref-active="active" class="item">
+ *     <a href ui-sref="app.user({user: 'bilbobaggins'})">@bilbobaggins</a>
+ *   </li>
+ * </ul>
+ * </pre>
+ *
+ *
+ * When the app state is "app.user" (or any children states), and contains the state parameter "user" with value "bilbobaggins",
+ * the resulting HTML will appear as (note the 'active' class):
+ * <pre>
+ * <ul>
+ *   <li ui-sref-active="active" class="item active">
+ *     <a ui-sref="app.user({user: 'bilbobaggins'})" href="/users/bilbobaggins">@bilbobaggins</a>
+ *   </li>
+ * </ul>
+ * </pre>
+ *
+ * The class name is interpolated **once** during the directives link time (any further changes to the
+ * interpolated value are ignored).
+ *
+ * Multiple classes may be specified in a space-separated format:
+ * <pre>
+ * <ul>
+ *   <li ui-sref-active='class1 class2 class3'>
+ *     <a ui-sref="app.user">link</a>
+ *   </li>
+ * </ul>
+ * </pre>
+ */
+
+/**
+ * @ngdoc directive
+ * @name ui.router.state.directive:ui-sref-active-eq
+ *
+ * @requires ui.router.state.$state
+ * @requires ui.router.state.$stateParams
+ * @requires $interpolate
+ *
+ * @restrict A
+ *
+ * @description
+ * The same as {@link ui.router.state.directive:ui-sref-active ui-sref-active} but will only activate
+ * when the exact target state used in the `ui-sref` is active; no child states.
+ *
+ */
+$StateRefActiveDirective.$inject = ['$state', '$stateParams', '$interpolate'];
+function $StateRefActiveDirective($state, $stateParams, $interpolate) {
+  return  {
+    restrict: "A",
+    controller: ['$scope', '$element', '$attrs', function ($scope, $element, $attrs) {
+      var state, params, activeClass;
+
+      // There probably isn't much point in $observing this
+      // uiSrefActive and uiSrefActiveEq share the same directive object with some
+      // slight difference in logic routing
+      activeClass = $interpolate($attrs.uiSrefActiveEq || $attrs.uiSrefActive || '', false)($scope);
+
+      // Allow uiSref to communicate with uiSrefActive[Equals]
+      this.$$setStateInfo = function (newState, newParams) {
+        state = $state.get(newState, stateContext($element));
+        params = newParams;
+        update();
+      };
+
+      $scope.$on('$stateChangeSuccess', update);
+
+      // Update route state
+      function update() {
+        if (isMatch()) {
+          $element.addClass(activeClass);
+        } else {
+          $element.removeClass(activeClass);
+        }
+      }
+
+      function isMatch() {
+        if (typeof $attrs.uiSrefActiveEq !== 'undefined') {
+          return state && $state.is(state.name, params);
+        } else {
+          return state && $state.includes(state.name, params);
+        }
+      }
+    }]
+  };
+}
+
+angular.module('ui.router.state')
+  .directive('uiSref', $StateRefDirective)
+  .directive('uiSrefActive', $StateRefActiveDirective)
+  .directive('uiSrefActiveEq', $StateRefActiveDirective);
+
+/**
+ * @ngdoc filter
+ * @name ui.router.state.filter:isState
+ *
+ * @requires ui.router.state.$state
+ *
+ * @description
+ * Translates to {@link ui.router.state.$state#methods_is $state.is("stateName")}.
+ */
+$IsStateFilter.$inject = ['$state'];
+function $IsStateFilter($state) {
+  var isFilter = function (state) {
+    return $state.is(state);
+  };
+  isFilter.$stateful = true;
+  return isFilter;
+}
+
+/**
+ * @ngdoc filter
+ * @name ui.router.state.filter:includedByState
+ *
+ * @requires ui.router.state.$state
+ *
+ * @description
+ * Translates to {@link ui.router.state.$state#methods_includes $state.includes('fullOrPartialStateName')}.
+ */
+$IncludedByStateFilter.$inject = ['$state'];
+function $IncludedByStateFilter($state) {
+  var includesFilter = function (state) {
+    return $state.includes(state);
+  };
+  includesFilter.$stateful = true;
+  return  includesFilter;
+}
+
+angular.module('ui.router.state')
+  .filter('isState', $IsStateFilter)
+  .filter('includedByState', $IncludedByStateFilter);
+})(window, window.angular);;angular.module( 'qgov', [] )
 
 .controller( 'QgovTemplateController', function( $scope ) {
 	// view model
@@ -10,132 +4241,652 @@ angular.module( 'qgov', [] )
 
 	$scope.swe = swe;
 });
-;/*global $, L, qg*/
-angular.module( 'map', [] )
+;/*global $, fullScreenApi */
+angular.module( 'qgov.map', [] )
 
 // map details
+.constant( 'CENTER', [ -23, 143 ])
 .constant( 'MAX_ZOOM', $( '#app-viewport' ).hasClass( 'obscure' ) ? 12 : 17 )
 
 
-.factory( 'mapModel', [ '$rootScope', 'MAX_ZOOM',
-function(                $rootScope,   MAX_ZOOM ) {
-	// leaflet config
-	L.Icon.Default.imagePath = qg.swe.paths.assets + 'images/skin/map-marker';
-
-	var model = {
-		center: {
-			lat: -23,
-			lng: 143,
-			zoom: 4
-		},
-		layers: {
-			baselayers: {
-				street: {
-					name: 'Street map',
-					url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-					type: 'xyz',
-					options: { attribution: 'Tiles &copy; Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2013' }
-				},
-				satellite: {
-					name: 'Satellite',
-					url: '//server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-					type: 'xyz',
-					options: { attribution: 'Esri, DigitalGlobe, GeoEye, i-cubed, USDA, USGS, AEX, Getmapping, Aerogrid, IGN, IGP, swisstopo, and the GIS User Community' }
-				}
-				// , {
-				// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-				// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
-				// }, {
-				// 	url: '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-				// 	options: { attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom' }
-				// }]
-			}
-		},
-		markers: {},
-		paths: {}
-	};
+.factory( 'qgovMapModel', [ '$window', 'QLD_POLY_COORDS',
+function(                    $window ,  QLD_POLY_COORDS ) {
+	var markers = [];
+	var areaOfInterest = null;
+	var bounds;
 
 	return {
-		center: function() {
-			return model.center;
-		},
-		layers: function() {
-			return model.layers;
+		areaOfInterest: function() {
+			return areaOfInterest;
 		},
 		markers: function() {
-			return model.markers;
+			return markers;
 		},
-		paths: function() {
-			return model.paths;
+		bounds: function() {
+			return bounds;
 		},
-		setMarkers: function( dataset ) {
-			// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/marker
-			model.markers = $.map( dataset, function( marker ) {
-				marker.focus = true;
-				marker.draggable = false;
-				marker.group = 'cluster';
-				return marker;
-			});
+		setMarkers: function( markerData ) {
+			markers = markerData;
+			areaOfInterest = null;
+		},
+		highlight: function( latlng ) {
+			areaOfInterest = latlng;
+		},
+		highlightState: function() {
+			areaOfInterest = 'Queensland';
+		},
 
-			if ( model.markers.length === 1 ) {
-				// only one marker, zoom in on it
-				model.center.lat = model.markers[ 0 ].lat;
-				model.center.lng = model.markers[ 0 ].lng;
-				model.center.zoom = MAX_ZOOM;
-
-				model.paths.target = {
-					type: 'circleMarker',
-					radius: 100,
-					latlngs: [ model.center.lat, model.center.lng ],
-					color: '#f00',
-					opacity: 0.8,
-					weight: 3,
-					fill: false,
-					clickable: false
-				};
-			} else {
-				model.paths = {};
+		// center on a given latlong, and zoom to show at least n Markers
+		// setBounds() : include all markers
+		// setBounds( latlong, radius, int ) : show a subset of markers near a given location
+		// assumes markers are sorted by distance from latlong
+		setView: function( latlong, radius, nMarkers ) {
+			if ( markers.length === 0 && ! latlong ) {
+				bounds = $window.L.latLngBounds( QLD_POLY_COORDS );
+				return;
 			}
 
-			$rootScope.$broadcast( 'changeMapMarkers' );
+			nMarkers = nMarkers ? markers.slice( 0, nMarkers ) : markers;
+			nMarkers = $.map( nMarkers, function( data ) {
+				return $window.L.marker( data.latlng, data.options );
+			});
+			var newBounds = new $window.L.featureGroup( nMarkers );
+
+			if ( latlong ) {
+				radius = radius * 1000 || 7500; // km to m (leaflet)
+				newBounds.addLayer( $window.L.circle( latlong, radius ));
+			}
+
+			// update model
+			// bounds = newBounds.getBounds();
+			bounds = newBounds.getBounds();
 		}
 	};
 }])
 
 
-.controller( 'MapController', [ 'mapModel', '$scope', '$location',
-function(                        mapModel,   $scope,   $location ) {
+.controller( 'qgovMapController', [ 'qgovMapModel', '$window', '$scope', '$state', 'CENTER', 'MAX_ZOOM', 'QLD_POLY_COORDS',
+function(                            qgovMapModel ,  $window ,  $scope ,  $state ,  CENTER ,  MAX_ZOOM ,  QLD_POLY_COORDS ) {
 
-	// view model
-	var map = this;
+	// leaflet config
+	$window.L.Icon.Default.imagePath = $window.qg.swe.paths.assets + 'images/skin/map-marker';
 
-	// map UI
-	// http://tombatossals.github.io/angular-leaflet-directive/#!/examples/simple-map
-	map.config = { scrollWheelZoom: true };
+	// setup the DIV container
+	$( '#map_canvas' ).height( 270 );
 
-	// http://leaflet-extras.github.io/leaflet-providers/preview/
-	map.layers = mapModel.layers();
+	// init leaflet
+	var map = $window.L.map( 'map_canvas', {
+		center: CENTER,
+		zoom: 4,
+		maxZoom: MAX_ZOOM,
+		fullscreenControl: true,
+		fullscreenControlOptions: { // optional
+			title:'Fullscreen'
+		}
+	});
 
-	function updateMap() {
-		map.center = mapModel.center();
-		map.markers = mapModel.markers();
-		map.paths = mapModel.paths();
-	}
+	// tile layers
+	var basemaps = {
+		'Street map': $window.L.tileLayer( '//server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+			attribution: 'Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2013'
+		}),
+		Satellite: $window.L.layerGroup([
+			$window.L.tileLayer( '//server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+				attribution: 'Esri, DigitalGlobe, GeoEye, i-cubed, USDA, USGS, AEX, Getmapping, Aerogrid, IGN, IGP, swisstopo, and the GIS User Community'
+			}),
+			$window.L.tileLayer( '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+				attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom'
+			}),
+			$window.L.tileLayer( '//server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+				attribution: '© 2013 Esri, DeLorme, NAVTEQ, TomTom'
+			})
+		])
+	};
 
-	// when markers change
-	$scope.$on( 'changeMapMarkers', updateMap );
+	basemaps[ 'Street map' ].addTo( map );
+	$window.L.control.layers( basemaps, {} ).addTo( map );
 
-	// onload
-	updateMap();
+	// cluster layer
+	var cluster = new $window.L.MarkerClusterGroup({
+		iconCreateFunction: function( cluster ) {
+			return $window.L.divIcon({
+				iconAnchor: [ 10, 25 ],
+				html: '<img src="' + $window.L.Icon.Default.imagePath + '/cluster-marker-icon.png" alt="" />' + '<span class="count">' + cluster.getChildCount() + '</span>',
+				className: 'cluster-icon'
+			});
+		}
+	});
+
+
+	// Replacing default values for button accessibility
+	$( '.leaflet-control-zoom-fullscreen' ).html( 'Fullscreen' );
+	$( '.leaflet-control-zoom-out' ).html( 'Zoom out' );
+	$( '.leaflet-control-zoom-in' ).html( 'Zoom in' );
+
+	// Let's make leaflet map js more accessible :) - putting "for" on labels for input buttons within the layers selection area.
+	$( '.leaflet-control-layers-base label' ).each(function() {
+		//for each span within leaflet layer label wrapper find span content and strip spaces
+		var spanText = $.trim( $( 'span', this ).text().replace( /\s+/g, '' ));
+		// check if this name is an id already with $(~~~).generateId(spanText);
+		//set label for attribute and input id
+		var input = $( 'input', this ).generateId( spanText );
+		$( this ).attr( 'for', input.attr( 'id' ));
+	});
+
+
+	// highlight area of interest
+	var circle = $window.L.circle( CENTER, 100, {
+		color: '#f00',
+		opacity: 0.8,
+		weight: 3,
+		fill: false,
+		clickable: false
+	});
+	var qld = $window.L.polygon( QLD_POLY_COORDS, {
+		color: '#f00',
+		opacity: 0.8,
+		weight: 3,
+		fill: false,
+		lineJoin: 'round',
+		clickable: false
+	});
+
 
 	// marker click
-	$scope.$on( 'leafletDirectiveMarker.click', function( event, args ) {
-		var marker = map.markers[ args.markerName ];
-		$location.path( '/' + marker.title );
+	function markerClicked( title ) {
+		// get back in scope
+		// https://groups.google.com/forum/#!topic/angular/nFbtADyEHg8
+		$scope.$apply(function() {
+			// navigate to result
+			$state.go( 'mam.detail', { title: title }, { inherit: false });
+			// exit fullscreen (if it was active)
+			fullScreenApi.cancelFullScreen();
+		});
+	}
+
+
+	// update markers
+	$scope.$watch( qgovMapModel.markers, function( newMarkers ) {
+
+		// turn them into markers
+		var markers = $.map( newMarkers, function( data ) {
+			var marker = $window.L.marker( data.latlng, data.options );
+			// FYI: leaflet doesn't implement event delegation
+			// and we want the associated data anyway (leaflet only provides latlng)
+			marker.on( 'click', function() {
+				markerClicked( data.options.title );
+			});
+			return marker;
+		});
+
+		// clear old
+		cluster.clearLayers();
+		map.removeLayer( cluster );
+
+		// add new
+		if ( markers.length ) {
+			cluster.addLayers( markers );
+			map.addLayer( cluster );
+		}
+	});
+
+
+	// display map bounds
+	$scope.$watch( qgovMapModel.bounds, function( newBounds ) {
+		if ( newBounds ) {
+			map.fitBounds( newBounds );
+		}
+	});
+
+
+	// update circle highlight around area of interest
+	$scope.$watch( qgovMapModel.areaOfInterest, function( newArea ) {
+		if ( newArea === 'Queensland' ) {
+			map.removeLayer( circle );
+			map.addLayer( qld );
+			map.fitBounds( qld );
+
+		} else if ( newArea ) {
+			map.removeLayer( qld );
+			// assume single marker
+			circle.setLatLng( newArea );
+			map.addLayer( circle );
+			map.setView( newArea, MAX_ZOOM );
+
+		} else {
+			map.removeLayer( qld );
+			map.removeLayer( circle );
+		}
 	});
 
 }]);
-;/*
+;angular.module( 'qgov.map' )
+.constant( 'QLD_POLY_COORDS', [
+	[ -29, 148.95676 ],
+	[ -28.9661, 149.0007 ],
+	[ -28.95769, 149.01306 ],
+	[ -28.95168, 149.03641 ],
+	[ -28.91322, 149.05289 ],
+	[ -28.86632, 149.07211 ],
+	[ -28.83625, 149.08928 ],
+	[ -28.83182, 149.13045 ],
+	[ -28.81107, 149.14013 ],
+	[ -28.80978, 149.16 ],
+	[ -28.80016, 149.18472 ],
+	[ -28.77521, 149.19249 ],
+	[ -28.75841, 149.22785 ],
+	[ -28.73756, 149.25201 ],
+	[ -28.73515, 149.27673 ],
+	[ -28.70755, 149.29999 ],
+	[ -28.70504, 149.33167 ],
+	[ -28.68818, 149.35913 ],
+	[ -28.6953, 149.39161 ],
+	[ -28.65945, 149.41531 ],
+	[ -28.61225, 149.44427 ],
+	[ -28.59417, 149.46625 ],
+	[ -28.58211, 149.50058 ],
+	[ -28.57729, 149.54453 ],
+	[ -28.57608, 149.58984 ],
+	[ -28.59899, 149.61319 ],
+	[ -28.59899, 149.63791 ],
+	[ -28.61225, 149.65027 ],
+	[ -28.6219, 149.66675 ],
+	[ -28.63275, 149.67773 ],
+	[ -28.63154, 149.70657 ],
+	[ -28.61254, 149.71604 ],
+	[ -28.61708, 149.74365 ],
+	[ -28.61225, 149.78897 ],
+	[ -28.60864, 149.8288 ],
+	[ -28.60743, 149.86313 ],
+	[ -28.60743, 149.87137 ],
+	[ -28.61949, 149.89883 ],
+	[ -28.61105, 149.91531 ],
+	[ -28.60988, 149.97504 ],
+	[ -28.57818, 150.02512 ],
+	[ -28.58404, 150.04413 ],
+	[ -28.5797, 150.06912 ],
+	[ -28.56402, 150.13641 ],
+	[ -28.55558, 150.17487 ],
+	[ -28.57126, 150.20233 ],
+	[ -28.57005, 150.21881 ],
+	[ -28.54763, 150.25374 ],
+	[ -28.5411, 150.28748 ],
+	[ -28.5411, 150.30121 ],
+	[ -28.55316, 150.32455 ],
+	[ -28.57005, 150.33005 ],
+	[ -28.59417, 150.36438 ],
+	[ -28.61949, 150.36713 ],
+	[ -28.63034, 150.39459 ],
+	[ -28.63636, 150.41382 ],
+	[ -28.65324, 150.41794 ],
+	[ -28.66649, 150.46463 ],
+	[ -28.66047, 150.51132 ],
+	[ -28.65685, 150.53055 ],
+	[ -28.67131, 150.53055 ],
+	[ -28.67372, 150.55115 ],
+	[ -28.65713, 150.55587 ],
+	[ -28.65806, 150.57999 ],
+	[ -28.6689, 150.60196 ],
+	[ -28.67372, 150.62668 ],
+	[ -28.65444, 150.67612 ],
+	[ -28.66408, 150.68436 ],
+	[ -28.63757, 150.73105 ],
+	[ -28.63757, 150.75027 ],
+	[ -28.66288, 150.82855 ],
+	[ -28.69179, 150.86838 ],
+	[ -28.693, 150.89447 ],
+	[ -28.70504, 150.92743 ],
+	[ -28.73395, 150.94116 ],
+	[ -28.73756, 150.98785 ],
+	[ -28.74481, 151.00886 ],
+	[ -28.76003, 151.02802 ],
+	[ -28.77609, 151.02356 ],
+	[ -28.79294, 151.02493 ],
+	[ -28.80136, 151.03867 ],
+	[ -28.82783, 151.04141 ],
+	[ -28.84708, 151.05103 ],
+	[ -28.84106, 151.09085 ],
+	[ -28.86392, 151.1499 ],
+	[ -28.88075, 151.18561 ],
+	[ -28.92043, 151.24191 ],
+	[ -28.95069, 151.28143 ],
+	[ -28.98171, 151.27899 ],
+	[ -29.03153, 151.27628 ],
+	[ -29.05737, 151.28311 ],
+	[ -29.07297, 151.27487 ],
+	[ -29.11617, 151.29684 ],
+	[ -29.13777, 151.3092 ],
+	[ -29.16415, 151.31607 ],
+	[ -29.17615, 151.3559 ],
+	[ -29.17495, 151.39847 ],
+	[ -29.14448, 151.42933 ],
+	[ -29.10543, 151.46708 ],
+	[ -29.06827, 151.49863 ],
+	[ -29.02435, 151.49872 ],
+	[ -28.98772, 151.5303 ],
+	[ -28.94086, 151.55777 ],
+	[ -28.93966, 151.57837 ],
+	[ -28.92404, 151.60721 ],
+	[ -28.87594, 151.71982 ],
+	[ -28.87113, 151.7308 ],
+	[ -28.92043, 151.74866 ],
+	[ -28.93781, 151.77778 ],
+	[ -28.95648, 151.77475 ],
+	[ -28.95168, 151.80222 ],
+	[ -28.96369, 151.8187 ],
+	[ -28.95528, 151.84341 ],
+	[ -28.92884, 151.84067 ],
+	[ -28.9036, 151.85165 ],
+	[ -28.91442, 151.87912 ],
+	[ -28.92043, 151.90933 ],
+	[ -28.93245, 151.9313 ],
+	[ -28.91201, 151.98212 ],
+	[ -28.89611, 151.99665 ],
+	[ -28.90961, 152.00958 ],
+	[ -28.87955, 152.02881 ],
+	[ -28.84863, 152.04103 ],
+	[ -28.84534, 152.02101 ],
+	[ -28.83036, 152.03283 ],
+	[ -28.79414, 152.03842 ],
+	[ -28.73934, 152.04114 ],
+	[ -28.7232, 152.05482 ],
+	[ -28.7027, 152.07407 ],
+	[ -28.67854, 152.06177 ],
+	[ -28.66288, 152.04254 ],
+	[ -28.66053, 152.01307 ],
+	[ -28.59971, 151.99199 ],
+	[ -28.57397, 151.97951 ],
+	[ -28.55913, 151.96154 ],
+	[ -28.51883, 151.95495 ],
+	[ -28.50611, 151.9725 ],
+	[ -28.51576, 151.98349 ],
+	[ -28.52662, 152.00546 ],
+	[ -28.49461, 152.04324 ],
+	[ -28.48197, 152.07138 ],
+	[ -28.46813, 152.07007 ],
+	[ -28.47111, 152.08923 ],
+	[ -28.46145, 152.13181 ],
+	[ -28.43748, 152.14816 ],
+	[ -28.43247, 152.19635 ],
+	[ -28.44817, 152.21832 ],
+	[ -28.42897, 152.23333 ],
+	[ -28.4059, 152.25677 ],
+	[ -28.39502, 152.27188 ],
+	[ -28.3914, 152.28836 ],
+	[ -28.36541, 152.31924 ],
+	[ -28.36965, 152.33643 ],
+	[ -28.36162, 152.36495 ],
+	[ -28.36844, 152.39273 ],
+	[ -28.31889, 152.41333 ],
+	[ -28.2989, 152.41467 ],
+	[ -28.29713, 152.4408 ],
+	[ -28.27299, 152.46409 ],
+	[ -28.25277, 152.47088 ],
+	[ -28.2548, 152.51358 ],
+	[ -28.26568, 152.53555 ],
+	[ -28.3068, 152.52319 ],
+	[ -28.32614, 152.56302 ],
+	[ -28.33102, 152.57633 ],
+	[ -28.30923, 152.60008 ],
+	[ -28.28569, 152.59743 ],
+	[ -28.27052, 152.60834 ],
+	[ -28.30922, 152.63306 ],
+	[ -28.31526, 152.67014 ],
+	[ -28.33219, 152.67975 ],
+	[ -28.35165, 152.73504 ],
+	[ -28.36361, 152.75116 ],
+	[ -28.35153, 152.76901 ],
+	[ -28.35032, 152.78961 ],
+	[ -28.35515, 152.80609 ],
+	[ -28.34065, 152.81433 ],
+	[ -28.31405, 152.85416 ],
+	[ -28.31461, 152.8809 ],
+	[ -28.33605, 152.94209 ],
+	[ -28.34056, 153.05264 ],
+	[ -28.35878, 153.10684 ],
+	[ -28.29675, 153.16241 ],
+	[ -28.26723, 153.17399 ],
+	[ -28.24948, 153.18336 ],
+	[ -28.25117, 153.19336 ],
+	[ -28.26084, 153.20435 ],
+	[ -28.26084, 153.23318 ],
+	[ -28.23786, 153.2785 ],
+	[ -28.23786, 153.33481 ],
+	[ -28.25238, 153.34167 ],
+	[ -28.24512, 153.38013 ],
+	[ -28.21003, 153.40759 ],
+	[ -28.18703, 153.44055 ],
+	[ -28.17372, 153.4639 ],
+	[ -28.1642, 153.46795 ],
+	[ -28.15737, 153.48793 ],
+	[ -28.17251, 153.52295 ],
+	[ -28.17614, 153.53668 ],
+	[ -28.16166, 153.549 ],
+	[ -28.11333, 153.56433 ],
+	[ -27.97965, 153.51012 ],
+	[ -27.73809, 153.5393 ],
+	[ -27.38727, 153.63807 ],
+	[ -27.31197, 153.55181 ],
+	[ -26.97349, 153.63831 ],
+	[ -26.90118, 153.45175 ],
+	[ -26.91218, 153.26327 ],
+	[ -26.69284, 153.26749 ],
+	[ -26.51624, 153.22665 ],
+	[ -26.31679, 153.23175 ],
+	[ -26.08245, 153.27557 ],
+	[ -25.90123, 153.31146 ],
+	[ -25.79975, 153.24971 ],
+	[ -25.75894, 153.19486 ],
+	[ -25.67525, 153.18163 ],
+	[ -25.34467, 153.32766 ],
+	[ -25.06132, 153.46224 ],
+	[ -24.92749, 153.46797 ],
+	[ -24.84158, 153.42682 ],
+	[ -24.64095, 153.38864 ],
+	[ -24.57804, 153.2801 ],
+	[ -24.73672, 153.05348 ],
+	[ -24.73935, 152.53555 ],
+	[ -24.63628, 152.45515 ],
+	[ -24.61706, 152.32819 ],
+	[ -24.46594, 152.15118 ],
+	[ -24.24597, 152.06511 ],
+	[ -23.93244, 151.81023 ],
+	[ -23.83605, 151.48939 ],
+	[ -23.51766, 151.33193 ],
+	[ -23.36259, 151.19673 ],
+	[ -23.39002, 150.96431 ],
+	[ -23.25484, 151.00134 ],
+	[ -22.83832, 150.96052 ],
+	[ -22.56689, 150.91387 ],
+	[ -22.27536, 150.8208 ],
+	[ -22.08055, 150.49896 ],
+	[ -22.12357, 150.3296 ],
+	[ -22.21024, 150.22711 ],
+	[ -22.06273, 150.18036 ],
+	[ -21.97642, 149.98867 ],
+	[ -21.96359, 149.87151 ],
+	[ -22.00583, 149.74621 ],
+	[ -22.15434, 149.70795 ],
+	[ -21.92165, 149.62065 ],
+	[ -21.74826, 149.5656 ],
+	[ -21.52718, 149.60083 ],
+	[ -21.37892, 149.55963 ],
+	[ -21.28284, 149.43478 ],
+	[ -21.09884, 149.37883 ],
+	[ -20.91425, 149.30209 ],
+	[ -20.81261, 149.15863 ],
+	[ -20.71074, 148.968 ],
+	[ -20.67969, 148.89112 ],
+	[ -20.63021, 148.85925 ],
+	[ -20.45275, 149.20532 ],
+	[ -20.27354, 149.23809 ],
+	[ -20.14878, 149.17786 ],
+	[ -19.96968, 149.04708 ],
+	[ -19.90906, 148.85731 ],
+	[ -20.01465, 148.76312 ],
+	[ -20.04535, 148.69504 ],
+	[ -19.89217, 148.57202 ],
+	[ -19.77393, 148.36026 ],
+	[ -19.88556, 148.27423 ],
+	[ -19.76756, 148.09275 ],
+	[ -19.75099, 147.99752 ],
+	[ -19.58719, 147.89069 ],
+	[ -19.56755, 147.74689 ],
+	[ -19.62189, 147.7002 ],
+	[ -19.46812, 147.6594 ],
+	[ -19.28414, 147.53916 ],
+	[ -19.16197, 147.39402 ],
+	[ -19.21262, 147.29095 ],
+	[ -19.30596, 147.26624 ],
+	[ -19.278, 147.18274 ],
+	[ -19.10461, 147.14287 ],
+	[ -19.04914, 146.99158 ],
+	[ -19.02613, 146.88882 ],
+	[ -19.005, 146.69495 ],
+	[ -18.96644, 146.54001 ],
+	[ -18.85976, 146.6206 ],
+	[ -18.80232, 146.84875 ],
+	[ -18.65822, 146.78898 ],
+	[ -18.58117, 146.69495 ],
+	[ -18.53236, 146.57301 ],
+	[ -18.3102, 146.4093 ],
+	[ -18.19283, 146.42578 ],
+	[ -18.04449, 146.3409 ],
+	[ -17.96442, 146.26504 ],
+	[ -17.84174, 146.23389 ],
+	[ -17.73561, 146.25275 ],
+	[ -17.60476, 146.2912 ],
+	[ -17.49897, 146.2479 ],
+	[ -17.32062, 146.22546 ],
+	[ -17.11454, 146.10718 ],
+	[ -16.95172, 146.04675 ],
+	[ -16.76773, 146.05774 ],
+	[ -16.71775, 145.90118 ],
+	[ -16.72295, 145.78452 ],
+	[ -16.56915, 145.64429 ],
+	[ -16.42713, 145.57238 ],
+	[ -16.35704, 145.54413 ],
+	[ -16.22455, 145.64427 ],
+	[ -16.06827, 145.64028 ],
+	[ -15.90482, 145.57499 ],
+	[ -15.77, 145.482 ],
+	[ -15.58865, 145.44525 ],
+	[ -15.39438, 145.3717 ],
+	[ -15.26078, 145.44774 ],
+	[ -15.10017, 145.41535 ],
+	[ -14.94797, 145.49442 ],
+	[ -14.84127, 145.41779 ],
+	[ -14.73657, 145.34469 ],
+	[ -14.71403, 145.24572 ],
+	[ -14.65534, 145.12939 ],
+	[ -14.57428, 145.04562 ],
+	[ -14.44958, 144.99276 ],
+	[ -14.43218, 144.83976 ],
+	[ -14.36551, 144.78058 ],
+	[ -14.11616, 144.70101 ],
+	[ -14.0337, 144.57343 ],
+	[ -14.00105, 144.43062 ],
+	[ -14.08597, 144.38782 ],
+	[ -14.14173, 144.30842 ],
+	[ -14.1525, 144.12545 ],
+	[ -14.26971, 144.09393 ],
+	[ -14.30697, 143.9209 ],
+	[ -14.11793, 143.7973 ],
+	[ -13.84824, 143.68938 ],
+	[ -13.41774, 143.66828 ],
+	[ -12.77295, 143.65999 ],
+	[ -12.71872, 143.52979 ],
+	[ -12.56219, 143.5742 ],
+	[ -12.45122, 143.44172 ],
+	[ -12.27983, 143.40761 ],
+	[ -12.2246, 143.2782 ],
+	[ -12.09197, 143.32704 ],
+	[ -11.96487, 143.37405 ],
+	[ -11.79488, 143.22611 ],
+	[ -11.7601, 143.03258 ],
+	[ -11.69265, 142.97307 ],
+	[ -11.50818, 142.98697 ],
+	[ -11.33554, 143.03624 ],
+	[ -11.15954, 142.97058 ],
+	[ -10.98434, 142.94037 ],
+	[ -10.83951, 142.8912 ],
+	[ -10.74036, 142.81247 ],
+	[ -10.59203, 142.76508 ],
+	[ -10.53158, 142.58222 ],
+	[ -10.54437, 142.43123 ],
+	[ -10.37598, 142.34246 ],
+	[ -10.17437, 142.48169 ],
+	[ -9.96777, 142.41084 ],
+	[ -9.9339, 142.16463 ],
+	[ -10.01456, 142.00433 ],
+	[ -10.26898, 141.97083 ],
+	[ -10.4392, 142.01477 ],
+	[ -10.66331, 142.01752 ],
+	[ -10.85758, 141.94336 ],
+	[ -11.06161, 142.00078 ],
+	[ -11.32656, 142.0285 ],
+	[ -11.59305, 141.94336 ],
+	[ -11.88885, 141.79504 ],
+	[ -12.15819, 141.62235 ],
+	[ -12.48753, 141.49567 ],
+	[ -12.65761, 141.47389 ],
+	[ -12.85733, 141.52039 ],
+	[ -13.0447, 141.50116 ],
+	[ -13.2346, 141.53961 ],
+	[ -13.40298, 141.50391 ],
+	[ -13.5659, 141.41327 ],
+	[ -13.79807, 141.36108 ],
+	[ -13.97405, 141.35284 ],
+	[ -14.21114, 141.44348 ],
+	[ -14.4267, 141.41602 ],
+	[ -14.66863, 141.43524 ],
+	[ -14.88905, 141.48193 ],
+	[ -15.09069, 141.56708 ],
+	[ -15.27889, 141.47095 ],
+	[ -15.48545, 141.35284 ],
+	[ -15.72088, 141.31165 ],
+	[ -15.87945, 141.28693 ],
+	[ -16.04581, 141.30341 ],
+	[ -16.18566, 141.26495 ],
+	[ -16.4936, 141.17057 ],
+	[ -16.68168, 141.04724 ],
+	[ -16.84661, 140.91888 ],
+	[ -17.00689, 140.85846 ],
+	[ -17.18016, 140.83099 ],
+	[ -17.37423, 140.76782 ],
+	[ -17.43165, 140.66116 ],
+	[ -17.49977, 140.53754 ],
+	[ -17.57307, 140.36198 ],
+	[ -17.60461, 140.11256 ],
+	[ -17.52185, 139.95921 ],
+	[ -17.3959, 139.66535 ],
+	[ -17.29978, 139.6205 ],
+	[ -17.1488, 139.75147 ],
+	[ -16.97011, 139.68842 ],
+	[ -16.88866, 139.50165 ],
+	[ -16.82697, 139.44525 ],
+	[ -16.74143, 139.61151 ],
+	[ -16.64155, 139.70206 ],
+	[ -16.58618, 139.86694 ],
+	[ -16.41396, 139.94042 ],
+	[ -16.34243, 139.85194 ],
+	[ -16.24676, 139.50603 ],
+	[ -16.31403, 139.3742 ],
+	[ -16.40947, 139.15346 ],
+	[ -16.55723, 139.04572 ],
+	[ -16.70986, 139.00177 ],
+	[ -16.76773, 138.9743 ],
+	[ -16.70986, 138.80676 ],
+	[ -16.67075, 138.62709 ],
+	[ -16.68092, 138.52386 ],
+	[ -16.6283, 138.37555 ],
+	[ -16.5998, 138.24039 ],
+	[ -16.52664, 138.12719 ],
+	[ -16.44233, 138 ],
+	[ -26, 138 ], // Poeppel Corner
+	[ -26, 141 ], // Haddon Corner
+	[ -29, 141 ]  // Cameron Corner
+]);;/*
  Leaflet, a JavaScript library for mobile-friendly interactive maps. http://leafletjs.com
  (c) 2010-2013, Vladimir Agafonkin
  (c) 2010-2011, CloudMade
@@ -150,3764 +4901,169 @@ break}e||r.push(t),t.touches=r.slice(),t.changedTouches=[t],n(t)};if(t[a+"touchs
 */
 !function(t,e){L.MarkerClusterGroup=L.FeatureGroup.extend({options:{maxClusterRadius:80,iconCreateFunction:null,spiderfyOnMaxZoom:!0,showCoverageOnHover:!0,zoomToBoundsOnClick:!0,singleMarkerMode:!1,disableClusteringAtZoom:null,removeOutsideVisibleBounds:!0,animateAddingMarkers:!1,spiderfyDistanceMultiplier:1,polygonOptions:{}},initialize:function(t){L.Util.setOptions(this,t),this.options.iconCreateFunction||(this.options.iconCreateFunction=this._defaultIconCreateFunction),this._featureGroup=L.featureGroup(),this._featureGroup.on(L.FeatureGroup.EVENTS,this._propagateEvent,this),this._nonPointGroup=L.featureGroup(),this._nonPointGroup.on(L.FeatureGroup.EVENTS,this._propagateEvent,this),this._inZoomAnimation=0,this._needsClustering=[],this._needsRemoving=[],this._currentShownBounds=null,this._queue=[]},addLayer:function(t){if(t instanceof L.LayerGroup){var e=[];for(var i in t._layers)e.push(t._layers[i]);return this.addLayers(e)}if(!t.getLatLng)return this._nonPointGroup.addLayer(t),this;if(!this._map)return this._needsClustering.push(t),this;if(this.hasLayer(t))return this;this._unspiderfy&&this._unspiderfy(),this._addLayer(t,this._maxZoom);var n=t,s=this._map.getZoom();if(t.__parent)for(;n.__parent._zoom>=s;)n=n.__parent;return this._currentShownBounds.contains(n.getLatLng())&&(this.options.animateAddingMarkers?this._animationAddLayer(t,n):this._animationAddLayerNonAnimated(t,n)),this},removeLayer:function(t){if(t instanceof L.LayerGroup){var e=[];for(var i in t._layers)e.push(t._layers[i]);return this.removeLayers(e)}return t.getLatLng?this._map?t.__parent?(this._unspiderfy&&(this._unspiderfy(),this._unspiderfyLayer(t)),this._removeLayer(t,!0),this._featureGroup.hasLayer(t)&&(this._featureGroup.removeLayer(t),t.setOpacity&&t.setOpacity(1)),this):this:(!this._arraySplice(this._needsClustering,t)&&this.hasLayer(t)&&this._needsRemoving.push(t),this):(this._nonPointGroup.removeLayer(t),this)},addLayers:function(t){var e,i,n,s=this._map,r=this._featureGroup,o=this._nonPointGroup;for(e=0,i=t.length;i>e;e++)if(n=t[e],n.getLatLng){if(!this.hasLayer(n))if(s){if(this._addLayer(n,this._maxZoom),n.__parent&&2===n.__parent.getChildCount()){var a=n.__parent.getAllChildMarkers(),h=a[0]===n?a[1]:a[0];r.removeLayer(h)}}else this._needsClustering.push(n)}else o.addLayer(n);return s&&(r.eachLayer(function(t){t instanceof L.MarkerCluster&&t._iconNeedsUpdate&&t._updateIcon()}),this._topClusterLevel._recursivelyAddChildrenToMap(null,this._zoom,this._currentShownBounds)),this},removeLayers:function(t){var e,i,n,s=this._featureGroup,r=this._nonPointGroup;if(!this._map){for(e=0,i=t.length;i>e;e++)n=t[e],this._arraySplice(this._needsClustering,n),r.removeLayer(n);return this}for(e=0,i=t.length;i>e;e++)n=t[e],n.__parent?(this._removeLayer(n,!0,!0),s.hasLayer(n)&&(s.removeLayer(n),n.setOpacity&&n.setOpacity(1))):r.removeLayer(n);return this._topClusterLevel._recursivelyAddChildrenToMap(null,this._zoom,this._currentShownBounds),s.eachLayer(function(t){t instanceof L.MarkerCluster&&t._updateIcon()}),this},clearLayers:function(){return this._map||(this._needsClustering=[],delete this._gridClusters,delete this._gridUnclustered),this._noanimationUnspiderfy&&this._noanimationUnspiderfy(),this._featureGroup.clearLayers(),this._nonPointGroup.clearLayers(),this.eachLayer(function(t){delete t.__parent}),this._map&&this._generateInitialClusters(),this},getBounds:function(){var t=new L.LatLngBounds;if(this._topClusterLevel)t.extend(this._topClusterLevel._bounds);else for(var e=this._needsClustering.length-1;e>=0;e--)t.extend(this._needsClustering[e].getLatLng());return t.extend(this._nonPointGroup.getBounds()),t},eachLayer:function(t,e){var i,n=this._needsClustering.slice();for(this._topClusterLevel&&this._topClusterLevel.getAllChildMarkers(n),i=n.length-1;i>=0;i--)t.call(e,n[i]);this._nonPointGroup.eachLayer(t,e)},getLayers:function(){var t=[];return this.eachLayer(function(e){t.push(e)}),t},getLayer:function(t){var e=null;return this.eachLayer(function(i){L.stamp(i)===t&&(e=i)}),e},hasLayer:function(t){if(!t)return!1;var e,i=this._needsClustering;for(e=i.length-1;e>=0;e--)if(i[e]===t)return!0;for(i=this._needsRemoving,e=i.length-1;e>=0;e--)if(i[e]===t)return!1;return!(!t.__parent||t.__parent._group!==this)||this._nonPointGroup.hasLayer(t)},zoomToShowLayer:function(t,e){var i=function(){if((t._icon||t.__parent._icon)&&!this._inZoomAnimation)if(this._map.off("moveend",i,this),this.off("animationend",i,this),t._icon)e();else if(t.__parent._icon){var n=function(){this.off("spiderfied",n,this),e()};this.on("spiderfied",n,this),t.__parent.spiderfy()}};t._icon&&this._map.getBounds().contains(t.getLatLng())?e():t.__parent._zoom<this._map.getZoom()?(this._map.on("moveend",i,this),this._map.panTo(t.getLatLng())):(this._map.on("moveend",i,this),this.on("animationend",i,this),this._map.setView(t.getLatLng(),t.__parent._zoom+1),t.__parent.zoomToBounds())},onAdd:function(t){this._map=t;var e,i,n;if(!isFinite(this._map.getMaxZoom()))throw"Map has no maxZoom specified";for(this._featureGroup.onAdd(t),this._nonPointGroup.onAdd(t),this._gridClusters||this._generateInitialClusters(),e=0,i=this._needsRemoving.length;i>e;e++)n=this._needsRemoving[e],this._removeLayer(n,!0);for(this._needsRemoving=[],e=0,i=this._needsClustering.length;i>e;e++)n=this._needsClustering[e],n.getLatLng?n.__parent||this._addLayer(n,this._maxZoom):this._featureGroup.addLayer(n);this._needsClustering=[],this._map.on("zoomend",this._zoomEnd,this),this._map.on("moveend",this._moveEnd,this),this._spiderfierOnAdd&&this._spiderfierOnAdd(),this._bindEvents(),this._zoom=this._map.getZoom(),this._currentShownBounds=this._getExpandedVisibleBounds(),this._topClusterLevel._recursivelyAddChildrenToMap(null,this._zoom,this._currentShownBounds)},onRemove:function(t){t.off("zoomend",this._zoomEnd,this),t.off("moveend",this._moveEnd,this),this._unbindEvents(),this._map._mapPane.className=this._map._mapPane.className.replace(" leaflet-cluster-anim",""),this._spiderfierOnRemove&&this._spiderfierOnRemove(),this._hideCoverage(),this._featureGroup.onRemove(t),this._nonPointGroup.onRemove(t),this._featureGroup.clearLayers(),this._map=null},getVisibleParent:function(t){for(var e=t;e&&!e._icon;)e=e.__parent;return e||null},_arraySplice:function(t,e){for(var i=t.length-1;i>=0;i--)if(t[i]===e)return t.splice(i,1),!0},_removeLayer:function(t,e,i){var n=this._gridClusters,s=this._gridUnclustered,r=this._featureGroup,o=this._map;if(e)for(var a=this._maxZoom;a>=0&&s[a].removeObject(t,o.project(t.getLatLng(),a));a--);var h,_=t.__parent,u=_._markers;for(this._arraySplice(u,t);_&&(_._childCount--,!(_._zoom<0));)e&&_._childCount<=1?(h=_._markers[0]===t?_._markers[1]:_._markers[0],n[_._zoom].removeObject(_,o.project(_._cLatLng,_._zoom)),s[_._zoom].addObject(h,o.project(h.getLatLng(),_._zoom)),this._arraySplice(_.__parent._childClusters,_),_.__parent._markers.push(h),h.__parent=_.__parent,_._icon&&(r.removeLayer(_),i||r.addLayer(h))):(_._recalculateBounds(),i&&_._icon||_._updateIcon()),_=_.__parent;delete t.__parent},_isOrIsParent:function(t,e){for(;e;){if(t===e)return!0;e=e.parentNode}return!1},_propagateEvent:function(t){if(t.layer instanceof L.MarkerCluster){if(t.originalEvent&&this._isOrIsParent(t.layer._icon,t.originalEvent.relatedTarget))return;t.type="cluster"+t.type}this.fire(t.type,t)},_defaultIconCreateFunction:function(t){var e=t.getChildCount(),i=" marker-cluster-";return i+=10>e?"small":100>e?"medium":"large",new L.DivIcon({html:"<div><span>"+e+"</span></div>",className:"marker-cluster"+i,iconSize:new L.Point(40,40)})},_bindEvents:function(){var t=this._map,e=this.options.spiderfyOnMaxZoom,i=this.options.showCoverageOnHover,n=this.options.zoomToBoundsOnClick;(e||n)&&this.on("clusterclick",this._zoomOrSpiderfy,this),i&&(this.on("clustermouseover",this._showCoverage,this),this.on("clustermouseout",this._hideCoverage,this),t.on("zoomend",this._hideCoverage,this))},_zoomOrSpiderfy:function(t){var e=this._map;e.getMaxZoom()===e.getZoom()?this.options.spiderfyOnMaxZoom&&t.layer.spiderfy():this.options.zoomToBoundsOnClick&&t.layer.zoomToBounds(),t.originalEvent&&13===t.originalEvent.keyCode&&e._container.focus()},_showCoverage:function(t){var e=this._map;this._inZoomAnimation||(this._shownPolygon&&e.removeLayer(this._shownPolygon),t.layer.getChildCount()>2&&t.layer!==this._spiderfied&&(this._shownPolygon=new L.Polygon(t.layer.getConvexHull(),this.options.polygonOptions),e.addLayer(this._shownPolygon)))},_hideCoverage:function(){this._shownPolygon&&(this._map.removeLayer(this._shownPolygon),this._shownPolygon=null)},_unbindEvents:function(){var t=this.options.spiderfyOnMaxZoom,e=this.options.showCoverageOnHover,i=this.options.zoomToBoundsOnClick,n=this._map;(t||i)&&this.off("clusterclick",this._zoomOrSpiderfy,this),e&&(this.off("clustermouseover",this._showCoverage,this),this.off("clustermouseout",this._hideCoverage,this),n.off("zoomend",this._hideCoverage,this))},_zoomEnd:function(){this._map&&(this._mergeSplitClusters(),this._zoom=this._map._zoom,this._currentShownBounds=this._getExpandedVisibleBounds())},_moveEnd:function(){if(!this._inZoomAnimation){var t=this._getExpandedVisibleBounds();this._topClusterLevel._recursivelyRemoveChildrenFromMap(this._currentShownBounds,this._zoom,t),this._topClusterLevel._recursivelyAddChildrenToMap(null,this._map._zoom,t),this._currentShownBounds=t}},_generateInitialClusters:function(){var t=this._map.getMaxZoom(),e=this.options.maxClusterRadius;this.options.disableClusteringAtZoom&&(t=this.options.disableClusteringAtZoom-1),this._maxZoom=t,this._gridClusters={},this._gridUnclustered={};for(var i=t;i>=0;i--)this._gridClusters[i]=new L.DistanceGrid(e),this._gridUnclustered[i]=new L.DistanceGrid(e);this._topClusterLevel=new L.MarkerCluster(this,-1)},_addLayer:function(t,e){var i,n,s=this._gridClusters,r=this._gridUnclustered;for(this.options.singleMarkerMode&&(t.options.icon=this.options.iconCreateFunction({getChildCount:function(){return 1},getAllChildMarkers:function(){return[t]}}));e>=0;e--){i=this._map.project(t.getLatLng(),e);var o=s[e].getNearObject(i);if(o)return o._addChild(t),t.__parent=o,void 0;if(o=r[e].getNearObject(i)){var a=o.__parent;a&&this._removeLayer(o,!1);var h=new L.MarkerCluster(this,e,o,t);s[e].addObject(h,this._map.project(h._cLatLng,e)),o.__parent=h,t.__parent=h;var _=h;for(n=e-1;n>a._zoom;n--)_=new L.MarkerCluster(this,n,_),s[n].addObject(_,this._map.project(o.getLatLng(),n));for(a._addChild(_),n=e;n>=0&&r[n].removeObject(o,this._map.project(o.getLatLng(),n));n--);return}r[e].addObject(t,i)}this._topClusterLevel._addChild(t),t.__parent=this._topClusterLevel},_enqueue:function(t){this._queue.push(t),this._queueTimeout||(this._queueTimeout=setTimeout(L.bind(this._processQueue,this),300))},_processQueue:function(){for(var t=0;t<this._queue.length;t++)this._queue[t].call(this);this._queue.length=0,clearTimeout(this._queueTimeout),this._queueTimeout=null},_mergeSplitClusters:function(){this._processQueue(),this._zoom<this._map._zoom&&this._currentShownBounds.contains(this._getExpandedVisibleBounds())?(this._animationStart(),this._topClusterLevel._recursivelyRemoveChildrenFromMap(this._currentShownBounds,this._zoom,this._getExpandedVisibleBounds()),this._animationZoomIn(this._zoom,this._map._zoom)):this._zoom>this._map._zoom?(this._animationStart(),this._animationZoomOut(this._zoom,this._map._zoom)):this._moveEnd()},_getExpandedVisibleBounds:function(){if(!this.options.removeOutsideVisibleBounds)return this.getBounds();var t=this._map,e=t.getBounds(),i=e._southWest,n=e._northEast,s=L.Browser.mobile?0:Math.abs(i.lat-n.lat),r=L.Browser.mobile?0:Math.abs(i.lng-n.lng);return new L.LatLngBounds(new L.LatLng(i.lat-s,i.lng-r,!0),new L.LatLng(n.lat+s,n.lng+r,!0))},_animationAddLayerNonAnimated:function(t,e){if(e===t)this._featureGroup.addLayer(t);else if(2===e._childCount){e._addToMap();var i=e.getAllChildMarkers();this._featureGroup.removeLayer(i[0]),this._featureGroup.removeLayer(i[1])}else e._updateIcon()}}),L.MarkerClusterGroup.include(L.DomUtil.TRANSITION?{_animationStart:function(){this._map._mapPane.className+=" leaflet-cluster-anim",this._inZoomAnimation++},_animationEnd:function(){this._map&&(this._map._mapPane.className=this._map._mapPane.className.replace(" leaflet-cluster-anim","")),this._inZoomAnimation--,this.fire("animationend")},_animationZoomIn:function(t,e){var i,n=this._getExpandedVisibleBounds(),s=this._featureGroup;this._topClusterLevel._recursively(n,t,0,function(r){var o,a=r._latlng,h=r._markers;for(n.contains(a)||(a=null),r._isSingleParent()&&t+1===e?(s.removeLayer(r),r._recursivelyAddChildrenToMap(null,e,n)):(r.setOpacity(0),r._recursivelyAddChildrenToMap(a,e,n)),i=h.length-1;i>=0;i--)o=h[i],n.contains(o._latlng)||s.removeLayer(o)}),this._forceLayout(),this._topClusterLevel._recursivelyBecomeVisible(n,e),s.eachLayer(function(t){t instanceof L.MarkerCluster||!t._icon||t.setOpacity(1)}),this._topClusterLevel._recursively(n,t,e,function(t){t._recursivelyRestoreChildPositions(e)}),this._enqueue(function(){this._topClusterLevel._recursively(n,t,0,function(t){s.removeLayer(t),t.setOpacity(1)}),this._animationEnd()})},_animationZoomOut:function(t,e){this._animationZoomOutSingle(this._topClusterLevel,t-1,e),this._topClusterLevel._recursivelyAddChildrenToMap(null,e,this._getExpandedVisibleBounds()),this._topClusterLevel._recursivelyRemoveChildrenFromMap(this._currentShownBounds,t,this._getExpandedVisibleBounds())},_animationZoomOutSingle:function(t,e,i){var n=this._getExpandedVisibleBounds();t._recursivelyAnimateChildrenInAndAddSelfToMap(n,e+1,i);var s=this;this._forceLayout(),t._recursivelyBecomeVisible(n,i),this._enqueue(function(){if(1===t._childCount){var r=t._markers[0];r.setLatLng(r.getLatLng()),r.setOpacity(1)}else t._recursively(n,i,0,function(t){t._recursivelyRemoveChildrenFromMap(n,e+1)});s._animationEnd()})},_animationAddLayer:function(t,e){var i=this,n=this._featureGroup;n.addLayer(t),e!==t&&(e._childCount>2?(e._updateIcon(),this._forceLayout(),this._animationStart(),t._setPos(this._map.latLngToLayerPoint(e.getLatLng())),t.setOpacity(0),this._enqueue(function(){n.removeLayer(t),t.setOpacity(1),i._animationEnd()})):(this._forceLayout(),i._animationStart(),i._animationZoomOutSingle(e,this._map.getMaxZoom(),this._map.getZoom())))},_forceLayout:function(){L.Util.falseFn(e.body.offsetWidth)}}:{_animationStart:function(){},_animationZoomIn:function(t,e){this._topClusterLevel._recursivelyRemoveChildrenFromMap(this._currentShownBounds,t),this._topClusterLevel._recursivelyAddChildrenToMap(null,e,this._getExpandedVisibleBounds())},_animationZoomOut:function(t,e){this._topClusterLevel._recursivelyRemoveChildrenFromMap(this._currentShownBounds,t),this._topClusterLevel._recursivelyAddChildrenToMap(null,e,this._getExpandedVisibleBounds())},_animationAddLayer:function(t,e){this._animationAddLayerNonAnimated(t,e)}}),L.markerClusterGroup=function(t){return new L.MarkerClusterGroup(t)},L.MarkerCluster=L.Marker.extend({initialize:function(t,e,i,n){L.Marker.prototype.initialize.call(this,i?i._cLatLng||i.getLatLng():new L.LatLng(0,0),{icon:this}),this._group=t,this._zoom=e,this._markers=[],this._childClusters=[],this._childCount=0,this._iconNeedsUpdate=!0,this._bounds=new L.LatLngBounds,i&&this._addChild(i),n&&this._addChild(n)},getAllChildMarkers:function(t){t=t||[];for(var e=this._childClusters.length-1;e>=0;e--)this._childClusters[e].getAllChildMarkers(t);for(var i=this._markers.length-1;i>=0;i--)t.push(this._markers[i]);return t},getChildCount:function(){return this._childCount},zoomToBounds:function(){for(var t,e=this._childClusters.slice(),i=this._group._map,n=i.getBoundsZoom(this._bounds),s=this._zoom+1,r=i.getZoom();e.length>0&&n>s;){s++;var o=[];for(t=0;t<e.length;t++)o=o.concat(e[t]._childClusters);e=o}n>s?this._group._map.setView(this._latlng,s):r>=n?this._group._map.setView(this._latlng,r+1):this._group._map.fitBounds(this._bounds)},getBounds:function(){var t=new L.LatLngBounds;return t.extend(this._bounds),t},_updateIcon:function(){this._iconNeedsUpdate=!0,this._icon&&this.setIcon(this)},createIcon:function(){return this._iconNeedsUpdate&&(this._iconObj=this._group.options.iconCreateFunction(this),this._iconNeedsUpdate=!1),this._iconObj.createIcon()},createShadow:function(){return this._iconObj.createShadow()},_addChild:function(t,e){this._iconNeedsUpdate=!0,this._expandBounds(t),t instanceof L.MarkerCluster?(e||(this._childClusters.push(t),t.__parent=this),this._childCount+=t._childCount):(e||this._markers.push(t),this._childCount++),this.__parent&&this.__parent._addChild(t,!0)},_expandBounds:function(t){var e,i=t._wLatLng||t._latlng;t instanceof L.MarkerCluster?(this._bounds.extend(t._bounds),e=t._childCount):(this._bounds.extend(i),e=1),this._cLatLng||(this._cLatLng=t._cLatLng||i);var n=this._childCount+e;this._wLatLng?(this._wLatLng.lat=(i.lat*e+this._wLatLng.lat*this._childCount)/n,this._wLatLng.lng=(i.lng*e+this._wLatLng.lng*this._childCount)/n):this._latlng=this._wLatLng=new L.LatLng(i.lat,i.lng)},_addToMap:function(t){t&&(this._backupLatlng=this._latlng,this.setLatLng(t)),this._group._featureGroup.addLayer(this)},_recursivelyAnimateChildrenIn:function(t,e,i){this._recursively(t,0,i-1,function(t){var i,n,s=t._markers;for(i=s.length-1;i>=0;i--)n=s[i],n._icon&&(n._setPos(e),n.setOpacity(0))},function(t){var i,n,s=t._childClusters;for(i=s.length-1;i>=0;i--)n=s[i],n._icon&&(n._setPos(e),n.setOpacity(0))})},_recursivelyAnimateChildrenInAndAddSelfToMap:function(t,e,i){this._recursively(t,i,0,function(n){n._recursivelyAnimateChildrenIn(t,n._group._map.latLngToLayerPoint(n.getLatLng()).round(),e),n._isSingleParent()&&e-1===i?(n.setOpacity(1),n._recursivelyRemoveChildrenFromMap(t,e)):n.setOpacity(0),n._addToMap()})},_recursivelyBecomeVisible:function(t,e){this._recursively(t,0,e,null,function(t){t.setOpacity(1)})},_recursivelyAddChildrenToMap:function(t,e,i){this._recursively(i,-1,e,function(n){if(e!==n._zoom)for(var s=n._markers.length-1;s>=0;s--){var r=n._markers[s];i.contains(r._latlng)&&(t&&(r._backupLatlng=r.getLatLng(),r.setLatLng(t),r.setOpacity&&r.setOpacity(0)),n._group._featureGroup.addLayer(r))}},function(e){e._addToMap(t)})},_recursivelyRestoreChildPositions:function(t){for(var e=this._markers.length-1;e>=0;e--){var i=this._markers[e];i._backupLatlng&&(i.setLatLng(i._backupLatlng),delete i._backupLatlng)}if(t-1===this._zoom)for(var n=this._childClusters.length-1;n>=0;n--)this._childClusters[n]._restorePosition();else for(var s=this._childClusters.length-1;s>=0;s--)this._childClusters[s]._recursivelyRestoreChildPositions(t)},_restorePosition:function(){this._backupLatlng&&(this.setLatLng(this._backupLatlng),delete this._backupLatlng)},_recursivelyRemoveChildrenFromMap:function(t,e,i){var n,s;this._recursively(t,-1,e-1,function(t){for(s=t._markers.length-1;s>=0;s--)n=t._markers[s],i&&i.contains(n._latlng)||(t._group._featureGroup.removeLayer(n),n.setOpacity&&n.setOpacity(1))},function(t){for(s=t._childClusters.length-1;s>=0;s--)n=t._childClusters[s],i&&i.contains(n._latlng)||(t._group._featureGroup.removeLayer(n),n.setOpacity&&n.setOpacity(1))})},_recursively:function(t,e,i,n,s){var r,o,a=this._childClusters,h=this._zoom;if(e>h)for(r=a.length-1;r>=0;r--)o=a[r],t.intersects(o._bounds)&&o._recursively(t,e,i,n,s);else if(n&&n(this),s&&this._zoom===i&&s(this),i>h)for(r=a.length-1;r>=0;r--)o=a[r],t.intersects(o._bounds)&&o._recursively(t,e,i,n,s)},_recalculateBounds:function(){var t,e=this._markers,i=this._childClusters;for(this._bounds=new L.LatLngBounds,delete this._wLatLng,t=e.length-1;t>=0;t--)this._expandBounds(e[t]);for(t=i.length-1;t>=0;t--)this._expandBounds(i[t])},_isSingleParent:function(){return this._childClusters.length>0&&this._childClusters[0]._childCount===this._childCount}}),L.DistanceGrid=function(t){this._cellSize=t,this._sqCellSize=t*t,this._grid={},this._objectPoint={}},L.DistanceGrid.prototype={addObject:function(t,e){var i=this._getCoord(e.x),n=this._getCoord(e.y),s=this._grid,r=s[n]=s[n]||{},o=r[i]=r[i]||[],a=L.Util.stamp(t);this._objectPoint[a]=e,o.push(t)},updateObject:function(t,e){this.removeObject(t),this.addObject(t,e)},removeObject:function(t,e){var i,n,s=this._getCoord(e.x),r=this._getCoord(e.y),o=this._grid,a=o[r]=o[r]||{},h=a[s]=a[s]||[];for(delete this._objectPoint[L.Util.stamp(t)],i=0,n=h.length;n>i;i++)if(h[i]===t)return h.splice(i,1),1===n&&delete a[s],!0},eachObject:function(t,e){var i,n,s,r,o,a,h,_=this._grid;for(i in _){o=_[i];for(n in o)for(a=o[n],s=0,r=a.length;r>s;s++)h=t.call(e,a[s]),h&&(s--,r--)}},getNearObject:function(t){var e,i,n,s,r,o,a,h,_=this._getCoord(t.x),u=this._getCoord(t.y),l=this._objectPoint,d=this._sqCellSize,p=null;for(e=u-1;u+1>=e;e++)if(s=this._grid[e])for(i=_-1;_+1>=i;i++)if(r=s[i])for(n=0,o=r.length;o>n;n++)a=r[n],h=this._sqDist(l[L.Util.stamp(a)],t),d>h&&(d=h,p=a);return p},_getCoord:function(t){return Math.floor(t/this._cellSize)},_sqDist:function(t,e){var i=e.x-t.x,n=e.y-t.y;return i*i+n*n}},function(){L.QuickHull={getDistant:function(t,e){var i=e[1].lat-e[0].lat,n=e[0].lng-e[1].lng;return n*(t.lat-e[0].lat)+i*(t.lng-e[0].lng)},findMostDistantPointFromBaseLine:function(t,e){var i,n,s,r=0,o=null,a=[];for(i=e.length-1;i>=0;i--)n=e[i],s=this.getDistant(n,t),s>0&&(a.push(n),s>r&&(r=s,o=n));return{maxPoint:o,newPoints:a}},buildConvexHull:function(t,e){var i=[],n=this.findMostDistantPointFromBaseLine(t,e);return n.maxPoint?(i=i.concat(this.buildConvexHull([t[0],n.maxPoint],n.newPoints)),i=i.concat(this.buildConvexHull([n.maxPoint,t[1]],n.newPoints))):[t[0]]},getConvexHull:function(t){var e,i=!1,n=!1,s=null,r=null;for(e=t.length-1;e>=0;e--){var o=t[e];(i===!1||o.lat>i)&&(s=o,i=o.lat),(n===!1||o.lat<n)&&(r=o,n=o.lat)}var a=[].concat(this.buildConvexHull([r,s],t),this.buildConvexHull([s,r],t));return a}}}(),L.MarkerCluster.include({getConvexHull:function(){var t,e,i=this.getAllChildMarkers(),n=[];for(e=i.length-1;e>=0;e--)t=i[e].getLatLng(),n.push(t);return L.QuickHull.getConvexHull(n)}}),L.MarkerCluster.include({_2PI:2*Math.PI,_circleFootSeparation:25,_circleStartAngle:Math.PI/6,_spiralFootSeparation:28,_spiralLengthStart:11,_spiralLengthFactor:5,_circleSpiralSwitchover:9,spiderfy:function(){if(this._group._spiderfied!==this&&!this._group._inZoomAnimation){var t,e=this.getAllChildMarkers(),i=this._group,n=i._map,s=n.latLngToLayerPoint(this._latlng);this._group._unspiderfy(),this._group._spiderfied=this,e.length>=this._circleSpiralSwitchover?t=this._generatePointsSpiral(e.length,s):(s.y+=10,t=this._generatePointsCircle(e.length,s)),this._animationSpiderfy(e,t)}},unspiderfy:function(t){this._group._inZoomAnimation||(this._animationUnspiderfy(t),this._group._spiderfied=null)},_generatePointsCircle:function(t,e){var i,n,s=this._group.options.spiderfyDistanceMultiplier*this._circleFootSeparation*(2+t),r=s/this._2PI,o=this._2PI/t,a=[];for(a.length=t,i=t-1;i>=0;i--)n=this._circleStartAngle+i*o,a[i]=new L.Point(e.x+r*Math.cos(n),e.y+r*Math.sin(n))._round();return a},_generatePointsSpiral:function(t,e){var i,n=this._group.options.spiderfyDistanceMultiplier*this._spiralLengthStart,s=this._group.options.spiderfyDistanceMultiplier*this._spiralFootSeparation,r=this._group.options.spiderfyDistanceMultiplier*this._spiralLengthFactor,o=0,a=[];for(a.length=t,i=t-1;i>=0;i--)o+=s/n+5e-4*i,a[i]=new L.Point(e.x+n*Math.cos(o),e.y+n*Math.sin(o))._round(),n+=this._2PI*r/o;return a},_noanimationUnspiderfy:function(){var t,e,i=this._group,n=i._map,s=i._featureGroup,r=this.getAllChildMarkers();for(this.setOpacity(1),e=r.length-1;e>=0;e--)t=r[e],s.removeLayer(t),t._preSpiderfyLatlng&&(t.setLatLng(t._preSpiderfyLatlng),delete t._preSpiderfyLatlng),t.setZIndexOffset&&t.setZIndexOffset(0),t._spiderLeg&&(n.removeLayer(t._spiderLeg),delete t._spiderLeg);i._spiderfied=null}}),L.MarkerCluster.include(L.DomUtil.TRANSITION?{SVG_ANIMATION:function(){return e.createElementNS("http://www.w3.org/2000/svg","animate").toString().indexOf("SVGAnimate")>-1}(),_animationSpiderfy:function(t,i){var n,s,r,o,a=this,h=this._group,_=h._map,u=h._featureGroup,l=_.latLngToLayerPoint(this._latlng);for(n=t.length-1;n>=0;n--)s=t[n],s.setOpacity?(s.setZIndexOffset(1e6),s.setOpacity(0),u.addLayer(s),s._setPos(l)):u.addLayer(s);h._forceLayout(),h._animationStart();var d=L.Path.SVG?0:.3,p=L.Path.SVG_NS;for(n=t.length-1;n>=0;n--)if(o=_.layerPointToLatLng(i[n]),s=t[n],s._preSpiderfyLatlng=s._latlng,s.setLatLng(o),s.setOpacity&&s.setOpacity(1),r=new L.Polyline([a._latlng,o],{weight:1.5,color:"#222",opacity:d}),_.addLayer(r),s._spiderLeg=r,L.Path.SVG&&this.SVG_ANIMATION){var c=r._path.getTotalLength();r._path.setAttribute("stroke-dasharray",c+","+c);var m=e.createElementNS(p,"animate");m.setAttribute("attributeName","stroke-dashoffset"),m.setAttribute("begin","indefinite"),m.setAttribute("from",c),m.setAttribute("to",0),m.setAttribute("dur",.25),r._path.appendChild(m),m.beginElement(),m=e.createElementNS(p,"animate"),m.setAttribute("attributeName","stroke-opacity"),m.setAttribute("attributeName","stroke-opacity"),m.setAttribute("begin","indefinite"),m.setAttribute("from",0),m.setAttribute("to",.5),m.setAttribute("dur",.25),r._path.appendChild(m),m.beginElement()}if(a.setOpacity(.3),L.Path.SVG)for(this._group._forceLayout(),n=t.length-1;n>=0;n--)s=t[n]._spiderLeg,s.options.opacity=.5,s._path.setAttribute("stroke-opacity",.5);setTimeout(function(){h._animationEnd(),h.fire("spiderfied")},200)},_animationUnspiderfy:function(t){var e,i,n,s=this._group,r=s._map,o=s._featureGroup,a=t?r._latLngToNewLayerPoint(this._latlng,t.zoom,t.center):r.latLngToLayerPoint(this._latlng),h=this.getAllChildMarkers(),_=L.Path.SVG&&this.SVG_ANIMATION;for(s._animationStart(),this.setOpacity(1),i=h.length-1;i>=0;i--)e=h[i],e._preSpiderfyLatlng&&(e.setLatLng(e._preSpiderfyLatlng),delete e._preSpiderfyLatlng,e.setOpacity?(e._setPos(a),e.setOpacity(0)):o.removeLayer(e),_&&(n=e._spiderLeg._path.childNodes[0],n.setAttribute("to",n.getAttribute("from")),n.setAttribute("from",0),n.beginElement(),n=e._spiderLeg._path.childNodes[1],n.setAttribute("from",.5),n.setAttribute("to",0),n.setAttribute("stroke-opacity",0),n.beginElement(),e._spiderLeg._path.setAttribute("stroke-opacity",0)));setTimeout(function(){var t=0;for(i=h.length-1;i>=0;i--)e=h[i],e._spiderLeg&&t++;for(i=h.length-1;i>=0;i--)e=h[i],e._spiderLeg&&(e.setOpacity&&(e.setOpacity(1),e.setZIndexOffset(0)),t>1&&o.removeLayer(e),r.removeLayer(e._spiderLeg),delete e._spiderLeg);s._animationEnd()},200)}}:{_animationSpiderfy:function(t,e){var i,n,s,r,o=this._group,a=o._map,h=o._featureGroup;for(i=t.length-1;i>=0;i--)r=a.layerPointToLatLng(e[i]),n=t[i],n._preSpiderfyLatlng=n._latlng,n.setLatLng(r),n.setZIndexOffset&&n.setZIndexOffset(1e6),h.addLayer(n),s=new L.Polyline([this._latlng,r],{weight:1.5,color:"#222"}),a.addLayer(s),n._spiderLeg=s;this.setOpacity(.3),o.fire("spiderfied")},_animationUnspiderfy:function(){this._noanimationUnspiderfy()}}),L.MarkerClusterGroup.include({_spiderfied:null,_spiderfierOnAdd:function(){this._map.on("click",this._unspiderfyWrapper,this),this._map.options.zoomAnimation&&this._map.on("zoomstart",this._unspiderfyZoomStart,this),this._map.on("zoomend",this._noanimationUnspiderfy,this),L.Path.SVG&&!L.Browser.touch&&this._map._initPathRoot()},_spiderfierOnRemove:function(){this._map.off("click",this._unspiderfyWrapper,this),this._map.off("zoomstart",this._unspiderfyZoomStart,this),this._map.off("zoomanim",this._unspiderfyZoomAnim,this),this._unspiderfy()},_unspiderfyZoomStart:function(){this._map&&this._map.on("zoomanim",this._unspiderfyZoomAnim,this)},_unspiderfyZoomAnim:function(t){L.DomUtil.hasClass(this._map._mapPane,"leaflet-touching")||(this._map.off("zoomanim",this._unspiderfyZoomAnim,this),this._unspiderfy(t))},_unspiderfyWrapper:function(){this._unspiderfy()},_unspiderfy:function(t){this._spiderfied&&this._spiderfied.unspiderfy(t)},_noanimationUnspiderfy:function(){this._spiderfied&&this._spiderfied._noanimationUnspiderfy()},_unspiderfyLayer:function(t){t._spiderLeg&&(this._featureGroup.removeLayer(t),t.setOpacity(1),t.setZIndexOffset(0),this._map.removeLayer(t._spiderLeg),delete t._spiderLeg)}})}(window,document);;(function() {
 
-"use strict";
-
-angular.module("leaflet-directive", []).directive('leaflet', ["$q", "leafletData", "leafletMapDefaults", "leafletHelpers", "leafletEvents", function ($q, leafletData, leafletMapDefaults, leafletHelpers, leafletEvents) {
-    var _leafletMap;
-    return {
-        restrict: "EA",
-        replace: true,
-        scope: {
-            center         : '=center',
-            defaults       : '=defaults',
-            maxbounds      : '=maxbounds',
-            bounds         : '=bounds',
-            markers        : '=markers',
-            legend         : '=legend',
-            geojson        : '=geojson',
-            paths          : '=paths',
-            tiles          : '=tiles',
-            layers         : '=layers',
-            controls       : '=controls',
-            decorations    : '=decorations',
-            eventBroadcast : '=eventBroadcast'
-        },
-        transclude: true,
-        template: '<div class="angular-leaflet-map"><div ng-transclude></div></div>',
-        controller: ["$scope", function ($scope) {
-            _leafletMap = $q.defer();
-            this.getMap = function () {
-                return _leafletMap.promise;
-            };
-
-            this.getLeafletScope = function() {
-                return $scope;
-            };
-        }],
-
-        link: function(scope, element, attrs) {
-            var isDefined = leafletHelpers.isDefined,
-                defaults = leafletMapDefaults.setDefaults(scope.defaults, attrs.id),
-                genDispatchMapEvent = leafletEvents.genDispatchMapEvent,
-                mapEvents = leafletEvents.getAvailableMapEvents();
-
-            // Set width and height utility functions
-            function updateWidth() {
-                if (isNaN(attrs.width)) {
-                    element.css('width', attrs.width);
-                } else {
-                    element.css('width', attrs.width + 'px');
-                }
-            }
-
-            function updateHeight() {
-                if (isNaN(attrs.height)) {
-                    element.css('height', attrs.height);
-                } else {
-                    element.css('height', attrs.height + 'px');
-                }
-            }
-
-            // If the width attribute defined update css
-            // Then watch if bound property changes and update css
-            if (isDefined(attrs.width)) {
-                updateWidth();
-
-                scope.$watch(
-                    function () {
-                        return element[0].getAttribute('width');
-                    },
-                    function () {
-                        updateWidth();
-                        map.invalidateSize();
-                    });
-            }
-
-            // If the height attribute defined update css
-            // Then watch if bound property changes and update css
-            if (isDefined(attrs.height)) {
-                updateHeight();
-
-                scope.$watch(
-                    function () {
-                        return element[0].getAttribute('height');
-                    },
-                    function () {
-                        updateHeight();
-                        map.invalidateSize();
-                    });
-            }
-
-            // Create the Leaflet Map Object with the options
-            var map = new L.Map(element[0], leafletMapDefaults.getMapCreationDefaults(attrs.id));
-            _leafletMap.resolve(map);
-
-            if (!isDefined(attrs.center)) {
-                map.setView([defaults.center.lat, defaults.center.lng], defaults.center.zoom);
-            }
-
-            // If no layers nor tiles defined, set the default tileLayer
-            if (!isDefined(attrs.tiles) && (!isDefined(attrs.layers))) {
-                var tileLayerObj = L.tileLayer(defaults.tileLayer, defaults.tileLayerOptions);
-                tileLayerObj.addTo(map);
-                leafletData.setTiles(tileLayerObj, attrs.id);
-            }
-
-            // Set zoom control configuration
-            if (isDefined(map.zoomControl) &&
-                isDefined(defaults.zoomControlPosition)) {
-                map.zoomControl.setPosition(defaults.zoomControlPosition);
-            }
-
-            if (isDefined(map.zoomControl) &&
-                defaults.zoomControl===false) {
-                map.zoomControl.removeFrom(map);
-            }
-
-            if (isDefined(map.zoomsliderControl) &&
-                isDefined(defaults.zoomsliderControl) &&
-                defaults.zoomsliderControl===false) {
-                map.zoomsliderControl.removeFrom(map);
-            }
-
-
-            // if no event-broadcast attribute, all events are broadcasted
-            if (!isDefined(attrs.eventBroadcast)) {
-                var logic = "broadcast";
-                for (var i = 0; i < mapEvents.length; i++) {
-                    var eventName = mapEvents[i];
-                    map.on(eventName, genDispatchMapEvent(scope, eventName, logic), {
-                        eventName: eventName
-                    });
-                }
-            }
-
-            // Resolve the map object to the promises
-            map.whenReady(function() {
-                leafletData.setMap(map, attrs.id);
-            });
-
-            scope.$on('$destroy', function () {
-                map.remove();
-                leafletData.unresolveMap(attrs.id);
-            });
-
-            //Handle request to invalidate the map size 
-	        //Up scope using $scope.$emit('invalidateSize') 
-	        //Down scope using $scope.$broadcast('invalidateSize')
-            scope.$on('invalidateSize', function() {
-                map.invalidateSize();
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('center',
-    ["$log", "$q", "$location", "$timeout", "leafletMapDefaults", "leafletHelpers", "leafletBoundsHelpers", "leafletEvents", function ($log, $q, $location, $timeout, leafletMapDefaults, leafletHelpers, leafletBoundsHelpers, leafletEvents) {
-
-    var isDefined     = leafletHelpers.isDefined,
-        isNumber      = leafletHelpers.isNumber,
-        isSameCenterOnMap = leafletHelpers.isSameCenterOnMap,
-        safeApply     = leafletHelpers.safeApply,
-        isValidCenter = leafletHelpers.isValidCenter,
-        isEmpty       = leafletHelpers.isEmpty,
-        isUndefinedOrEmpty = leafletHelpers.isUndefinedOrEmpty;
-
-    var shouldInitializeMapWithBounds = function(bounds, center) {
-        return (isDefined(bounds) && !isEmpty(bounds)) && isUndefinedOrEmpty(center);
-    };
-
-    var _leafletCenter;
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: 'leaflet',
-        controller: function () {
-            _leafletCenter = $q.defer();
-            this.getCenter = function() {
-                return _leafletCenter.promise;
-            };
-        },
-        link: function(scope, element, attrs, controller) {
-            var leafletScope  = controller.getLeafletScope(),
-                centerModel   = leafletScope.center;
-
-            controller.getMap().then(function(map) {
-                var defaults = leafletMapDefaults.getDefaults(attrs.id);
-
-                if (attrs.center.search("-") !== -1) {
-                    $log.error('The "center" variable can\'t use a "-" on his key name: "' + attrs.center + '".');
-                    map.setView([defaults.center.lat, defaults.center.lng], defaults.center.zoom);
-                    return;
-                } else if (shouldInitializeMapWithBounds(leafletScope.bounds, centerModel)) {
-                    map.fitBounds(leafletBoundsHelpers.createLeafletBounds(leafletScope.bounds));
-                    centerModel = map.getCenter();
-                    safeApply(leafletScope, function (scope) {
-                        scope.center = {
-                            lat: map.getCenter().lat,
-                            lng: map.getCenter().lng,
-                            zoom: map.getZoom(),
-                            autoDiscover: false
-                        };
-                    });
-                    safeApply(leafletScope, function (scope) {
-                        var mapBounds = map.getBounds();
-                        var newScopeBounds = {
-                            northEast: {
-                                lat: mapBounds._northEast.lat,
-                                lng: mapBounds._northEast.lng
-                            },
-                            southWest: {
-                                lat: mapBounds._southWest.lat,
-                                lng: mapBounds._southWest.lng
-                            }
-                        };
-                        scope.bounds = newScopeBounds;
-                    });
-                } else if (!isDefined(centerModel)) {
-                    $log.error('The "center" property is not defined in the main scope');
-                    map.setView([defaults.center.lat, defaults.center.lng], defaults.center.zoom);
-                    return;
-                } else if (!(isDefined(centerModel.lat) && isDefined(centerModel.lng)) && !isDefined(centerModel.autoDiscover)) {
-                    angular.copy(defaults.center, centerModel);
-                }
-
-                var urlCenterHash, mapReady;
-                if (attrs.urlHashCenter === "yes") {
-                    var extractCenterFromUrl = function() {
-                        var search = $location.search();
-                        var centerParam;
-                        if (isDefined(search.c)) {
-                            var cParam = search.c.split(":");
-                            if (cParam.length === 3) {
-                                centerParam = { lat: parseFloat(cParam[0]), lng: parseFloat(cParam[1]), zoom: parseInt(cParam[2], 10) };
-                            }
-                        }
-                        return centerParam;
-                    };
-                    urlCenterHash = extractCenterFromUrl();
-
-                    leafletScope.$on('$locationChangeSuccess', function(event) {
-                        var scope = event.currentScope;
-                        //$log.debug("updated location...");
-                        var urlCenter = extractCenterFromUrl();
-                        if (isDefined(urlCenter) && !isSameCenterOnMap(urlCenter, map)) {
-                            //$log.debug("updating center model...", urlCenter);
-                            scope.center = {
-                                lat: urlCenter.lat,
-                                lng: urlCenter.lng,
-                                zoom: urlCenter.zoom
-                            };
-                        }
-                    });
-                }
-
-                leafletScope.$watch("center", function(center) {
-                    //$log.debug("updated center model...");
-                    // The center from the URL has priority
-                    if (isDefined(urlCenterHash)) {
-                        angular.copy(urlCenterHash, center);
-                        urlCenterHash = undefined;
-                    }
-
-                    if (!isValidCenter(center) && center.autoDiscover !== true) {
-                        $log.warn("[AngularJS - Leaflet] invalid 'center'");
-                        //map.setView([defaults.center.lat, defaults.center.lng], defaults.center.zoom);
-                        return;
-                    }
-
-                    if (center.autoDiscover === true) {
-                        if (!isNumber(center.zoom)) {
-                            map.setView([defaults.center.lat, defaults.center.lng], defaults.center.zoom);
-                        }
-                        if (isNumber(center.zoom) && center.zoom > defaults.center.zoom) {
-                            map.locate({ setView: true, maxZoom: center.zoom });
-                        } else if (isDefined(defaults.maxZoom)) {
-                            map.locate({ setView: true, maxZoom: defaults.maxZoom });
-                        } else {
-                            map.locate({ setView: true });
-                        }
-                        return;
-                    }
-
-                    if (mapReady && isSameCenterOnMap(center, map)) {
-                        //$log.debug("no need to update map again.");
-                        return;
-                    }
-
-                    //$log.debug("updating map center...", center);
-                    leafletScope.settingCenterFromScope = true;
-                    map.setView([center.lat, center.lng], center.zoom);
-                    leafletEvents.notifyCenterChangedToBounds(leafletScope, map);
-                    $timeout(function() {
-                        leafletScope.settingCenterFromScope = false;
-                        //$log.debug("allow center scope updates");
-                    });
-                }, true);
-
-                map.whenReady(function() {
-                    mapReady = true;
-                });
-
-                map.on("moveend", function(/* event */) {
-                    // Resolve the center after the first map position
-                    _leafletCenter.resolve();
-                    leafletEvents.notifyCenterUrlHashChanged(leafletScope, map, attrs, $location.search());
-                    //$log.debug("updated center on map...");
-                    if (isSameCenterOnMap(centerModel, map) || scope.settingCenterFromScope) {
-                        //$log.debug("same center in model, no need to update again.");
-                        return;
-                    }
-                    safeApply(leafletScope, function(scope) {
-                        if (!leafletScope.settingCenterFromScope) {
-                            //$log.debug("updating center model...", map.getCenter(), map.getZoom());
-                            scope.center = {
-                                lat: map.getCenter().lat,
-                                lng: map.getCenter().lng,
-                                zoom: map.getZoom(),
-                                autoDiscover: false
-                            };
-                        }
-                        leafletEvents.notifyCenterChangedToBounds(leafletScope, map);
-                    });
-                });
-
-                if (centerModel.autoDiscover === true) {
-                    map.on("locationerror", function() {
-                        $log.warn("[AngularJS - Leaflet] The Geolocation API is unauthorized on this page.");
-                        if (isValidCenter(centerModel)) {
-                            map.setView([centerModel.lat, centerModel.lng], centerModel.zoom);
-                            leafletEvents.notifyCenterChangedToBounds(leafletScope, map);
-                        } else {
-                            map.setView([defaults.center.lat, defaults.center.lng], defaults.center.zoom);
-                            leafletEvents.notifyCenterChangedToBounds(leafletScope, map);
-                        }
-                    });
-                }
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('tiles', ["$log", "leafletData", "leafletMapDefaults", "leafletHelpers", function ($log, leafletData, leafletMapDefaults, leafletHelpers) {
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: 'leaflet',
-
-        link: function(scope, element, attrs, controller) {
-            var isDefined = leafletHelpers.isDefined,
-                leafletScope  = controller.getLeafletScope(),
-                tiles = leafletScope.tiles;
-
-            if (!isDefined(tiles) && !isDefined(tiles.url)) {
-                $log.warn("[AngularJS - Leaflet] The 'tiles' definition doesn't have the 'url' property.");
-                return;
-            }
-
-            controller.getMap().then(function(map) {
-                var defaults = leafletMapDefaults.getDefaults(attrs.id);
-                var tileLayerObj;
-                leafletScope.$watch("tiles", function(tiles) {
-                    var tileLayerOptions = defaults.tileLayerOptions;
-                    var tileLayerUrl = defaults.tileLayer;
-
-                    // If no valid tiles are in the scope, remove the last layer
-                    if (!isDefined(tiles.url) && isDefined(tileLayerObj)) {
-                        map.removeLayer(tileLayerObj);
-                        return;
-                    }
-
-                    // No leafletTiles object defined yet
-                    if (!isDefined(tileLayerObj)) {
-                        if (isDefined(tiles.options)) {
-                            angular.copy(tiles.options, tileLayerOptions);
-                        }
-
-                        if (isDefined(tiles.url)) {
-                            tileLayerUrl = tiles.url;
-                        }
-
-                        tileLayerObj = L.tileLayer(tileLayerUrl, tileLayerOptions);
-                        tileLayerObj.addTo(map);
-                        leafletData.setTiles(tileLayerObj, attrs.id);
-                        return;
-                    }
-
-                    // If the options of the tilelayer is changed, we need to redraw the layer
-                    if (isDefined(tiles.url) && isDefined(tiles.options) && !angular.equals(tiles.options, tileLayerOptions)) {
-                        map.removeLayer(tileLayerObj);
-                        tileLayerOptions = defaults.tileLayerOptions;
-                        angular.copy(tiles.options, tileLayerOptions);
-                        tileLayerUrl = tiles.url;
-                        tileLayerObj = L.tileLayer(tileLayerUrl, tileLayerOptions);
-                        tileLayerObj.addTo(map);
-                        leafletData.setTiles(tileLayerObj, attrs.id);
-                        return;
-                    }
-
-                    // Only the URL of the layer is changed, update the tiles object
-                    if (isDefined(tiles.url)) {
-                        tileLayerObj.setUrl(tiles.url);
-                    }
-                }, true);
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('legend', ["$log", "$http", "leafletHelpers", "leafletLegendHelpers", function ($log, $http, leafletHelpers, leafletLegendHelpers) {
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: 'leaflet',
-
-        link: function(scope, element, attrs, controller) {
-            var isArray      = leafletHelpers.isArray,
-                isDefined = leafletHelpers.isDefined,
-                isFunction = leafletHelpers.isFunction,
-                leafletScope = controller.getLeafletScope(),
-                legend       = leafletScope.legend;
-
-            var legendClass = legend.legendClass ? legend.legendClass : "legend";
-            var position = legend.position || 'bottomright';
-            var leafletLegend;
-
-            controller.getMap().then(function(map) {
-                leafletScope.$watch('legend', function (legend) {
-                    if (!isDefined(legend.url) && (!isArray(legend.colors) || !isArray(legend.labels) || legend.colors.length !== legend.labels.length)) {
-                        $log.warn("[AngularJS - Leaflet] legend.colors and legend.labels must be set.");
-                    } else if(isDefined(legend.url)){
-                        $log.info("[AngularJS - Leaflet] loading arcgis legend service.");
-                    } else {
-                        if (isDefined(leafletLegend)) {
-						    leafletLegend.removeFrom(map);
-						}
-                        leafletLegend = L.control({ position: position });
-                        leafletLegend.onAdd = leafletLegendHelpers.getOnAddArrayLegend(legend, legendClass);
-                        leafletLegend.addTo(map);
-                    }
-                });
-
-                leafletScope.$watch('legend.url', function(newURL) {
-                    if(!isDefined(newURL)) {
-                        return;
-                    }
-                    $http.get(newURL)
-                        .success(function(legendData) {
-                            if(isDefined(leafletLegend)) {
-                                leafletLegendHelpers.updateArcGISLegend(leafletLegend.getContainer(),legendData);
-                            } else {
-                                leafletLegend = L.control({ position: position });
-                                leafletLegend.onAdd = leafletLegendHelpers.getOnAddArcGISLegend(legendData, legendClass);
-                                leafletLegend.addTo(map);
-                            }
-                            if(isDefined(legend.loadedData) && isFunction(legend.loadedData)) {
-                                legend.loadedData();
-                            }
-                        })
-                        .error(function() {
-                            $log.warn('[AngularJS - Leaflet] legend.url not loaded.');
-                        });
-                });
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('geojson', ["$log", "$rootScope", "leafletData", "leafletHelpers", function ($log, $rootScope, leafletData, leafletHelpers) {
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: 'leaflet',
-
-        link: function(scope, element, attrs, controller) {
-            var safeApply = leafletHelpers.safeApply,
-                isDefined = leafletHelpers.isDefined,
-                leafletScope  = controller.getLeafletScope(),
-                leafletGeoJSON = {};
-
-            controller.getMap().then(function(map) {
-                leafletScope.$watch("geojson", function(geojson) {
-                    if (isDefined(leafletGeoJSON) && map.hasLayer(leafletGeoJSON)) {
-                        map.removeLayer(leafletGeoJSON);
-                    }
-
-                    if (!(isDefined(geojson) && isDefined(geojson.data))) {
-                        return;
-                    }
-
-                    var resetStyleOnMouseout = geojson.resetStyleOnMouseout,
-                        onEachFeature = geojson.onEachFeature;
-
-                    if (!onEachFeature) {
-                        onEachFeature = function(feature, layer) {
-                            if (leafletHelpers.LabelPlugin.isLoaded() && isDefined(geojson.label)) {
-                                layer.bindLabel(feature.properties.description);
-                            }
-
-                            layer.on({
-                                mouseover: function(e) {
-                                    safeApply(leafletScope, function() {
-                                        geojson.selected = feature;
-                                        $rootScope.$broadcast('leafletDirectiveMap.geojsonMouseover', e);
-                                    });
-                                },
-                                mouseout: function(e) {
-                                    if (resetStyleOnMouseout) {
-                                        leafletGeoJSON.resetStyle(e.target);
-                                    }
-                                    safeApply(leafletScope, function() {
-                                        geojson.selected = undefined;
-                                        $rootScope.$broadcast('leafletDirectiveMap.geojsonMouseout', e);
-                                    });
-                                },
-                                click: function(e) {
-                                    safeApply(leafletScope, function() {
-                                        geojson.selected = feature;
-                                        $rootScope.$broadcast('leafletDirectiveMap.geojsonClick', geojson.selected, e);
-                                    });
-                                }
-                            });
-                        };
-                    }
-
-                    geojson.options = {
-                        style: geojson.style,
-                        filter: geojson.filter,
-                        onEachFeature: onEachFeature,
-                        pointToLayer: geojson.pointToLayer
-                    };
-
-                    leafletGeoJSON = L.geoJson(geojson.data, geojson.options);
-                    leafletData.setGeoJSON(leafletGeoJSON, attrs.id);
-                    leafletGeoJSON.addTo(map);
-                });
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('layers', ["$log", "$q", "leafletData", "leafletHelpers", "leafletLayerHelpers", "leafletControlHelpers", function ($log, $q, leafletData, leafletHelpers, leafletLayerHelpers, leafletControlHelpers) {
-    var _leafletLayers;
-
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: 'leaflet',
-        controller: function () {
-            _leafletLayers = $q.defer();
-            this.getLayers = function() {
-                return _leafletLayers.promise;
-            };
-        },
-        link: function(scope, element, attrs, controller) {
-            var isDefined = leafletHelpers.isDefined,
-                leafletLayers = {},
-                leafletScope  = controller.getLeafletScope(),
-                layers = leafletScope.layers,
-                createLayer = leafletLayerHelpers.createLayer,
-                updateLayersControl = leafletControlHelpers.updateLayersControl,
-                isLayersControlVisible = false;
-
-            controller.getMap().then(function(map) {
-                // Do we have a baselayers property?
-                if (!isDefined(layers) || !isDefined(layers.baselayers) || Object.keys(layers.baselayers).length === 0) {
-                    // No baselayers property
-                    $log.error('[AngularJS - Leaflet] At least one baselayer has to be defined');
-                    return;
-                }
-
-                // We have baselayers to add to the map
-                _leafletLayers.resolve(leafletLayers);
-                leafletData.setLayers(leafletLayers, attrs.id);
-
-                leafletLayers.baselayers = {};
-                leafletLayers.overlays = {};
-
-                var mapId = attrs.id;
-
-                // Setup all baselayers definitions
-                var oneVisibleLayer = false;
-                for (var layerName in layers.baselayers) {
-                    var newBaseLayer = createLayer(layers.baselayers[layerName]);
-                    if (!isDefined(newBaseLayer)) {
-                        delete layers.baselayers[layerName];
-                        continue;
-                    }
-                    leafletLayers.baselayers[layerName] = newBaseLayer;
-                    // Only add the visible layer to the map, layer control manages the addition to the map
-                    // of layers in its control
-                    if (layers.baselayers[layerName].top === true) {
-                        map.addLayer(leafletLayers.baselayers[layerName]);
-                        oneVisibleLayer = true;
-                    }
-                }
-
-                // If there is no visible layer add first to the map
-                if (!oneVisibleLayer && Object.keys(leafletLayers.baselayers).length > 0) {
-                    map.addLayer(leafletLayers.baselayers[Object.keys(layers.baselayers)[0]]);
-                }
-
-                // Setup the Overlays
-                for (layerName in layers.overlays) {
-                    if(layers.overlays[layerName].type === 'cartodb') {
-
-                    }
-                    var newOverlayLayer = createLayer(layers.overlays[layerName]);
-                    if (!isDefined(newOverlayLayer)) {
-                        delete layers.overlays[layerName];
-                        continue;
-                    }
-                    leafletLayers.overlays[layerName] = newOverlayLayer;
-                    // Only add the visible overlays to the map
-                    if (layers.overlays[layerName].visible === true) {
-                        map.addLayer(leafletLayers.overlays[layerName]);
-                    }
-                }
-
-                // Watch for the base layers
-                leafletScope.$watch('layers.baselayers', function(newBaseLayers) {
-                    // Delete layers from the array
-                    for (var name in leafletLayers.baselayers) {
-                        if (!isDefined(newBaseLayers[name])) {
-                            // Remove from the map if it's on it
-                            if (map.hasLayer(leafletLayers.baselayers[name])) {
-                                map.removeLayer(leafletLayers.baselayers[name]);
-                            }
-                            delete leafletLayers.baselayers[name];
-                        }
-                    }
-                    // add new layers
-                    for (var newName in newBaseLayers) {
-                        if (!isDefined(leafletLayers.baselayers[newName])) {
-                            var testBaseLayer = createLayer(newBaseLayers[newName]);
-                            if (isDefined(testBaseLayer)) {
-                                leafletLayers.baselayers[newName] = testBaseLayer;
-                                // Only add the visible layer to the map
-                                if (newBaseLayers[newName].top === true) {
-                                    map.addLayer(leafletLayers.baselayers[newName]);
-                                }
-                            }
-                        }
-                    }
-                    if (Object.keys(leafletLayers.baselayers).length === 0) {
-                        $log.error('[AngularJS - Leaflet] At least one baselayer has to be defined');
-                        return;
-                    }
-
-                    //we have layers, so we need to make, at least, one active
-                    var found = false;
-                    // search for an active layer
-                    for (var key in leafletLayers.baselayers) {
-                        if (map.hasLayer(leafletLayers.baselayers[key])) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    // If there is no active layer make one active
-                    if (!found) {
-                        map.addLayer(leafletLayers.baselayers[Object.keys(layers.baselayers)[0]]);
-                    }
-
-                    // Only show the layers switch selector control if we have more than one baselayer + overlay
-                    isLayersControlVisible = updateLayersControl(map, mapId, isLayersControlVisible, newBaseLayers, layers.overlays, leafletLayers);
-                }, true);
-
-                // Watch for the overlay layers
-                leafletScope.$watch('layers.overlays', function(newOverlayLayers) {
-                    // Delete layers from the array
-                    for (var name in leafletLayers.overlays) {
-                        if (!isDefined(newOverlayLayers[name])) {
-                            // Remove from the map if it's on it
-                            if (map.hasLayer(leafletLayers.overlays[name])) {
-                                map.removeLayer(leafletLayers.overlays[name]);
-                            }
-                            // TODO: Depending on the layer type we will have to delete what's included on it
-                            delete leafletLayers.overlays[name];
-                        }
-                    }
-
-                    // add new overlays
-                    for (var newName in newOverlayLayers) {
-                        if (!isDefined(leafletLayers.overlays[newName])) {
-                            var testOverlayLayer = createLayer(newOverlayLayers[newName]);
-                            if (isDefined(testOverlayLayer)) {
-                                leafletLayers.overlays[newName] = testOverlayLayer;
-                                if (newOverlayLayers[newName].visible === true) {
-                                    map.addLayer(leafletLayers.overlays[newName]);
-                                }
-                            }
-                        }
-
-                        // check for the .visible property to hide/show overLayers
-                        if (newOverlayLayers[newName].visible && !map.hasLayer(leafletLayers.overlays[newName])) {
-                            map.addLayer(leafletLayers.overlays[newName]);
-                        } else if (newOverlayLayers[newName].visible === false && map.hasLayer(leafletLayers.overlays[newName])) {
-                            map.removeLayer(leafletLayers.overlays[newName]);
-                        }
-                    }
-
-                    // Only add the layers switch selector control if we have more than one baselayer + overlay
-                    isLayersControlVisible = updateLayersControl(map, mapId, isLayersControlVisible, layers.baselayers, newOverlayLayers, leafletLayers);
-                }, true);
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('bounds', ["$log", "$timeout", "leafletHelpers", "leafletBoundsHelpers", function ($log, $timeout, leafletHelpers, leafletBoundsHelpers) {
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: [ 'leaflet', 'center' ],
-
-        link: function(scope, element, attrs, controller) {
-            var isDefined = leafletHelpers.isDefined,
-                createLeafletBounds = leafletBoundsHelpers.createLeafletBounds,
-                leafletScope = controller[0].getLeafletScope(),
-                mapController = controller[0];
-
-            var emptyBounds = function(bounds) {
-                if (bounds._southWest.lat === 0 && bounds._southWest.lng === 0 && bounds._northEast.lat === 0 && bounds._northEast.lng === 0) {
-                    return true;
-                }
-                return false;
-            };
-
-            mapController.getMap().then(function (map) {
-                leafletScope.$on('boundsChanged', function (event) {
-                    var scope = event.currentScope;
-                    var bounds = map.getBounds();
-                    //$log.debug('updated map bounds...', bounds);
-                    if (emptyBounds(bounds) || scope.settingBoundsFromScope) {
-                        return;
-                    }
-                    var newScopeBounds = {
-                        northEast: {
-                            lat: bounds._northEast.lat,
-                            lng: bounds._northEast.lng
-                        },
-                        southWest: {
-                            lat: bounds._southWest.lat,
-                            lng: bounds._southWest.lng
-                        }
-                    };
-                    if (!angular.equals(scope.bounds, newScopeBounds)) {
-                        //$log.debug('Need to update scope bounds.');
-                        scope.bounds = newScopeBounds;
-                    }
-                });
-                leafletScope.$watch('bounds', function (bounds) {
-                    //$log.debug('updated bounds...', bounds);
-                    if (!isDefined(bounds)) {
-                        $log.error('[AngularJS - Leaflet] Invalid bounds');
-                        return;
-                    }
-                    var leafletBounds = createLeafletBounds(bounds);
-                    if (leafletBounds && !map.getBounds().equals(leafletBounds)) {
-                        //$log.debug('Need to update map bounds.');
-                        scope.settingBoundsFromScope = true;
-                        map.fitBounds(leafletBounds);
-                        $timeout( function() {
-                            //$log.debug('Allow bound updates.');
-                            scope.settingBoundsFromScope = false;
-                        });
-                    }
-                }, true);
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('markers', ["$log", "$rootScope", "$q", "leafletData", "leafletHelpers", "leafletMapDefaults", "leafletMarkersHelpers", "leafletEvents", function ($log, $rootScope, $q, leafletData, leafletHelpers, leafletMapDefaults, leafletMarkersHelpers, leafletEvents) {
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: ['leaflet', '?layers'],
-
-        link: function(scope, element, attrs, controller) {
-            var mapController = controller[0],
-                Helpers = leafletHelpers,
-                isDefined = leafletHelpers.isDefined,
-                isString = leafletHelpers.isString,
-                leafletScope  = mapController.getLeafletScope(),
-                deleteMarker = leafletMarkersHelpers.deleteMarker,
-                addMarkerWatcher = leafletMarkersHelpers.addMarkerWatcher,
-                listenMarkerEvents = leafletMarkersHelpers.listenMarkerEvents,
-                addMarkerToGroup = leafletMarkersHelpers.addMarkerToGroup,
-                bindMarkerEvents = leafletEvents.bindMarkerEvents,
-                createMarker = leafletMarkersHelpers.createMarker;
-
-            mapController.getMap().then(function(map) {
-                var leafletMarkers = {},
-                    getLayers;
-
-                // If the layers attribute is used, we must wait until the layers are created
-                if (isDefined(controller[1])) {
-                    getLayers = controller[1].getLayers;
-                } else {
-                    getLayers = function() {
-                        var deferred = $q.defer();
-                        deferred.resolve();
-                        return deferred.promise;
-                    };
-                }
-
-                getLayers().then(function(layers) {
-                    leafletData.setMarkers(leafletMarkers, attrs.id);
-                    leafletScope.$watch('markers', function(newMarkers) {
-                        // Delete markers from the array
-                        for (var name in leafletMarkers) {
-                            if (!isDefined(newMarkers) || !isDefined(newMarkers[name])) {
-                                deleteMarker(leafletMarkers[name], map, layers);
-                                delete leafletMarkers[name];
-                            }
-                        }
-
-                        // add new markers
-                        for (var newName in newMarkers) {
-                            if (newName.search("-") !== -1) {
-                                $log.error('The marker can\'t use a "-" on his key name: "' + newName + '".');
-                                continue;
-                            }
-
-                            if (!isDefined(leafletMarkers[newName])) {
-                                var markerData = newMarkers[newName];
-                                var marker = createMarker(markerData);
-                                if (!isDefined(marker)) {
-                                    $log.error('[AngularJS - Leaflet] Received invalid data on the marker ' + newName + '.');
-                                    continue;
-                                }
-                                leafletMarkers[newName] = marker;
-
-                                // Bind message
-                                if (isDefined(markerData.message)) {
-                                    marker.bindPopup(markerData.message, markerData.popupOptions);
-                                }
-
-                                // Add the marker to a cluster group if needed
-                                if (isDefined(markerData.group)) {
-                                    var groupOptions = isDefined(markerData.groupOption) ? markerData.groupOption : null;
-                                    addMarkerToGroup(marker, markerData.group, groupOptions, map);
-                                }
-
-                                // Show label if defined
-                                if (Helpers.LabelPlugin.isLoaded() && isDefined(markerData.label) && isDefined(markerData.label.message)) {
-                                    marker.bindLabel(markerData.label.message, markerData.label.options);
-                                }
-
-                                // Check if the marker should be added to a layer
-                                if (isDefined(markerData) && isDefined(markerData.layer)) {
-                                    if (!isString(markerData.layer)) {
-                                        $log.error('[AngularJS - Leaflet] A layername must be a string');
-                                        continue;
-                                    }
-                                    if (!isDefined(layers)) {
-                                        $log.error('[AngularJS - Leaflet] You must add layers to the directive if the markers are going to use this functionality.');
-                                        continue;
-                                    }
-
-                                    if (!isDefined(layers.overlays) || !isDefined(layers.overlays[markerData.layer])) {
-                                        $log.error('[AngularJS - Leaflet] A marker can only be added to a layer of type "group"');
-                                        continue;
-                                    }
-                                    var layerGroup = layers.overlays[markerData.layer];
-                                    if (!(layerGroup instanceof L.LayerGroup || layerGroup instanceof L.FeatureGroup)) {
-                                        $log.error('[AngularJS - Leaflet] Adding a marker to an overlay needs a overlay of the type "group" or "featureGroup"');
-                                        continue;
-                                    }
-
-                                    // The marker goes to a correct layer group, so first of all we add it
-                                    layerGroup.addLayer(marker);
-
-                                    // The marker is automatically added to the map depending on the visibility
-                                    // of the layer, so we only have to open the popup if the marker is in the map
-                                    if (map.hasLayer(marker) && markerData.focus === true) {
-                                        marker.openPopup();
-                                    }
-
-                                // Add the marker to the map if it hasn't been added to a layer or to a group
-                                } else if (!isDefined(markerData.group)) {
-                                    // We do not have a layer attr, so the marker goes to the map layer
-                                    map.addLayer(marker);
-                                    if (markerData.focus === true) {
-                                        marker.openPopup();
-                                    }
-                                    if (Helpers.LabelPlugin.isLoaded() && isDefined(markerData.label) && isDefined(markerData.label.options) && markerData.label.options.noHide === true) {
-                                        marker.showLabel();
-                                    }
-                                }
-
-                                // Should we watch for every specific marker on the map?
-                                var shouldWatch = (!isDefined(attrs.watchMarkers) || attrs.watchMarkers === 'true');
-
-                                if (shouldWatch) {
-                                    addMarkerWatcher(marker, newName, leafletScope, layers, map);
-                                    listenMarkerEvents(marker, markerData, leafletScope);
-                                }
-                                bindMarkerEvents(marker, newName, markerData, leafletScope);
-                            }
-                        }
-                    }, true);
-                });
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('paths', ["$log", "$q", "leafletData", "leafletMapDefaults", "leafletHelpers", "leafletPathsHelpers", "leafletEvents", function ($log, $q, leafletData, leafletMapDefaults, leafletHelpers, leafletPathsHelpers, leafletEvents) {
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: ['leaflet', '?layers'],
-
-        link: function(scope, element, attrs, controller) {
-            var mapController = controller[0],
-                isDefined = leafletHelpers.isDefined,
-                isString = leafletHelpers.isString,
-                leafletScope  = mapController.getLeafletScope(),
-                paths     = leafletScope.paths,
-                createPath = leafletPathsHelpers.createPath,
-                bindPathEvents = leafletEvents.bindPathEvents,
-                setPathOptions = leafletPathsHelpers.setPathOptions;
-
-            mapController.getMap().then(function(map) {
-                var defaults = leafletMapDefaults.getDefaults(attrs.id),
-                    getLayers;
-
-                // If the layers attribute is used, we must wait until the layers are created
-                if (isDefined(controller[1])) {
-                    getLayers = controller[1].getLayers;
-                } else {
-                    getLayers = function() {
-                        var deferred = $q.defer();
-                        deferred.resolve();
-                        return deferred.promise;
-                    };
-                }
-
-                if (!isDefined(paths)) {
-                    return;
-                }
-
-                getLayers().then(function(layers) {
-
-                    var leafletPaths = {};
-                    leafletData.setPaths(leafletPaths, attrs.id);
-
-                    // Function for listening every single path once created
-                    var watchPathFn = function(leafletPath, name) {
-                        var clearWatch = leafletScope.$watch('paths.' + name, function(pathData) {
-                            if (!isDefined(pathData)) {
-                                map.removeLayer(leafletPath);
-                                clearWatch();
-                                return;
-                            }
-                            setPathOptions(leafletPath, pathData.type, pathData);
-                        }, true);
-                    };
-
-                    leafletScope.$watch("paths", function (newPaths) {
-
-                        // Create the new paths
-                        for (var newName in newPaths) {
-                            if (newName.search('\\$') === 0) {
-                                continue;
-                            }
-                            if (newName.search("-") !== -1) {
-                                $log.error('[AngularJS - Leaflet] The path name "' + newName + '" is not valid. It must not include "-" and a number.');
-                                continue;
-                            }
-
-                            if (!isDefined(leafletPaths[newName])) {
-                                var pathData = newPaths[newName];
-                                var newPath = createPath(newName, newPaths[newName], defaults);
-
-                                // bind popup if defined
-                                if (isDefined(newPath) && isDefined(pathData.message)) {
-                                    newPath.bindPopup(pathData.message);
-                                }
-
-                                // Show label if defined
-                                if (leafletHelpers.LabelPlugin.isLoaded() && isDefined(pathData.label) && isDefined(pathData.label.message)) {
-                                    newPath.bindLabel(pathData.label.message, pathData.label.options);
-                                }
-
-                                // Check if the marker should be added to a layer
-                                if (isDefined(pathData) && isDefined(pathData.layer)) {
-
-                                    if (!isString(pathData.layer)) {
-                                        $log.error('[AngularJS - Leaflet] A layername must be a string');
-                                        continue;
-                                    }
-                                    if (!isDefined(layers)) {
-                                        $log.error('[AngularJS - Leaflet] You must add layers to the directive if the markers are going to use this functionality.');
-                                        continue;
-                                    }
-
-                                    if (!isDefined(layers.overlays) || !isDefined(layers.overlays[pathData.layer])) {
-                                        $log.error('[AngularJS - Leaflet] A marker can only be added to a layer of type "group"');
-                                        continue;
-                                    }
-                                    var layerGroup = layers.overlays[pathData.layer];
-                                    if (!(layerGroup instanceof L.LayerGroup || layerGroup instanceof L.FeatureGroup)) {
-                                        $log.error('[AngularJS - Leaflet] Adding a marker to an overlay needs a overlay of the type "group" or "featureGroup"');
-                                        continue;
-                                    }
-
-                                    // Listen for changes on the new path
-                                    leafletPaths[newName] = newPath;
-                                    // The path goes to a correct layer group, so first of all we add it
-                                    layerGroup.addLayer(newPath);
-
-                                    watchPathFn(newPath, newName);
-                                } else if (isDefined(newPath)) {
-                                    // Listen for changes on the new path
-                                    leafletPaths[newName] = newPath;
-                                    map.addLayer(newPath);
-                                    watchPathFn(newPath, newName);
-                                }
-
-                                bindPathEvents(newPath, newName, pathData, leafletScope);
-                            }
-                        }
-
-                        // Delete paths (by name) from the array
-                        for (var name in leafletPaths) {
-                            if (!isDefined(newPaths[name])) {
-                                delete leafletPaths[name];
-                            }
-                        }
-
-                    }, true);
-
-                });
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('controls', ["$log", "leafletHelpers", function ($log, leafletHelpers) {
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: '?^leaflet',
-
-        link: function(scope, element, attrs, controller) {
-            if(!controller) {
-                return;
-            }
-
-            var isDefined = leafletHelpers.isDefined,
-                leafletScope  = controller.getLeafletScope(),
-                controls = leafletScope.controls;
-
-            controller.getMap().then(function(map) {
-                if (isDefined(L.Control.Draw) && isDefined(controls.draw)) {
-                    var drawnItems = new L.FeatureGroup();
-                    var options = {
-                        edit: {
-                            featureGroup: drawnItems
-                        }
-                    };
-                    angular.extend(options, controls.draw);
-                    controls.draw = options;
-                    map.addLayer(options.edit.featureGroup);
-
-                    var drawControl = new L.Control.Draw(options);
-                    map.addControl(drawControl);
-                }
-
-                if(isDefined(controls.custom)) {
-                    for(var i in controls.custom) {
-                        map.addControl(controls.custom[i]);
-                    }
-                }
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('eventBroadcast', ["$log", "$rootScope", "leafletHelpers", "leafletEvents", function ($log, $rootScope, leafletHelpers, leafletEvents) {
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: 'leaflet',
-
-        link: function(scope, element, attrs, controller) {
-            var isObject = leafletHelpers.isObject,
-                leafletScope  = controller.getLeafletScope(),
-                eventBroadcast = leafletScope.eventBroadcast,
-                availableMapEvents = leafletEvents.getAvailableMapEvents(),
-                genDispatchMapEvent = leafletEvents.genDispatchMapEvent;
-
-            controller.getMap().then(function(map) {
-
-                var mapEvents = [];
-                var i;
-                var eventName;
-                var logic = "broadcast";
-
-                if (isObject(eventBroadcast)) {
-                    // We have a possible valid object
-                    if (eventBroadcast.map === undefined || eventBroadcast.map === null) {
-                        // We do not have events enable/disable do we do nothing (all enabled by default)
-                        mapEvents = availableMapEvents;
-                    } else if (typeof eventBroadcast.map !== 'object') {
-                        // Not a valid object
-                        $log.warn("[AngularJS - Leaflet] event-broadcast.map must be an object check your model.");
-                    } else {
-                        // We have a possible valid map object
-                        // Event propadation logic
-                        if (eventBroadcast.map.logic !== undefined && eventBroadcast.map.logic !== null) {
-                            // We take care of possible propagation logic
-                            if (eventBroadcast.map.logic !== "emit" && eventBroadcast.map.logic !== "broadcast") {
-                                // This is an error
-                                $log.warn("[AngularJS - Leaflet] Available event propagation logic are: 'emit' or 'broadcast'.");
-                            } else if (eventBroadcast.map.logic === "emit") {
-                                logic = "emit";
-                            }
-                        }
-                        // Enable / Disable
-                        var mapEventsEnable = false, mapEventsDisable = false;
-                        if (eventBroadcast.map.enable !== undefined && eventBroadcast.map.enable !== null) {
-                            if (typeof eventBroadcast.map.enable === 'object') {
-                                mapEventsEnable = true;
-                            }
-                        }
-                        if (eventBroadcast.map.disable !== undefined && eventBroadcast.map.disable !== null) {
-                            if (typeof eventBroadcast.map.disable === 'object') {
-                                mapEventsDisable = true;
-                            }
-                        }
-                        if (mapEventsEnable && mapEventsDisable) {
-                            // Both are active, this is an error
-                            $log.warn("[AngularJS - Leaflet] can not enable and disable events at the time");
-                        } else if (!mapEventsEnable && !mapEventsDisable) {
-                            // Both are inactive, this is an error
-                            $log.warn("[AngularJS - Leaflet] must enable or disable events");
-                        } else {
-                            // At this point the map object is OK, lets enable or disable events
-                            if (mapEventsEnable) {
-                                // Enable events
-                                for (i = 0; i < eventBroadcast.map.enable.length; i++) {
-                                    eventName = eventBroadcast.map.enable[i];
-                                    // Do we have already the event enabled?
-                                    if (mapEvents.indexOf(eventName) !== -1) {
-                                        // Repeated event, this is an error
-                                        $log.warn("[AngularJS - Leaflet] This event " + eventName + " is already enabled");
-                                    } else {
-                                        // Does the event exists?
-                                        if (availableMapEvents.indexOf(eventName) === -1) {
-                                            // The event does not exists, this is an error
-                                            $log.warn("[AngularJS - Leaflet] This event " + eventName + " does not exist");
-                                        } else {
-                                            // All ok enable the event
-                                            mapEvents.push(eventName);
-                                        }
-                                    }
-                                }
-                            } else {
-                                // Disable events
-                                mapEvents = availableMapEvents;
-                                for (i = 0; i < eventBroadcast.map.disable.length; i++) {
-                                    eventName = eventBroadcast.map.disable[i];
-                                    var index = mapEvents.indexOf(eventName);
-                                    if (index === -1) {
-                                        // The event does not exist
-                                        $log.warn("[AngularJS - Leaflet] This event " + eventName + " does not exist or has been already disabled");
-                                    } else {
-                                        mapEvents.splice(index, 1);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    for (i = 0; i < mapEvents.length; i++) {
-                        eventName = mapEvents[i];
-                        map.on(eventName, genDispatchMapEvent(leafletScope, eventName, logic), {
-                            eventName: eventName
-                        });
-                    }
-                } else {
-                    // Not a valid object
-                    $log.warn("[AngularJS - Leaflet] event-broadcast must be an object, check your model.");
-                }
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive('maxbounds', ["$log", "leafletMapDefaults", "leafletBoundsHelpers", function ($log, leafletMapDefaults, leafletBoundsHelpers) {
-    return {
-        restrict: "A",
-        scope: false,
-        replace: false,
-        require: 'leaflet',
-
-        link: function(scope, element, attrs, controller) {
-            var leafletScope  = controller.getLeafletScope(),
-                isValidBounds = leafletBoundsHelpers.isValidBounds;
-
-
-            controller.getMap().then(function(map) {
-                leafletScope.$watch("maxbounds", function (maxbounds) {
-                    if (!isValidBounds(maxbounds)) {
-                        // Unset any previous maxbounds
-                        map.setMaxBounds();
-                        return;
-                    }
-                    var bounds = [
-                        [ maxbounds.southWest.lat, maxbounds.southWest.lng ],
-                        [ maxbounds.northEast.lat, maxbounds.northEast.lng ]
-                    ];
-
-                    map.setMaxBounds(bounds);
-                    if (!attrs.center) {
-                            map.fitBounds(bounds);
-                        }
-                });
-            });
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").directive("decorations", ["$log", "leafletHelpers", function($log, leafletHelpers) {
-	return {
-		restrict: "A", 
-		scope: false,
-		replace: false,
-		require: 'leaflet',
-
-		link: function(scope, element, attrs, controller) {
-			var leafletScope = controller.getLeafletScope(),
-				PolylineDecoratorPlugin = leafletHelpers.PolylineDecoratorPlugin,
-				isDefined = leafletHelpers.isDefined,
-				leafletDecorations = {};
-
-			/* Creates an "empty" decoration with a set of coordinates, but no pattern. */
-			function createDecoration(options) {
-				if (isDefined(options) && isDefined(options.coordinates)) {
-					if (!PolylineDecoratorPlugin.isLoaded()) {
-						$log.error('[AngularJS - Leaflet] The PolylineDecorator Plugin is not loaded.');
-					}
-				}
-
-				return L.polylineDecorator(options.coordinates);
-			}
-
-			/* Updates the path and the patterns for the provided decoration, and returns the decoration. */
-			function setDecorationOptions(decoration, options) {
-				if (isDefined(decoration) && isDefined(options)) {
-					if (isDefined(options.coordinates) && isDefined(options.patterns)) {
-						decoration.setPaths(options.coordinates);
-						decoration.setPatterns(options.patterns);
-						return decoration;
-					}
-				}
-			}
-
-			controller.getMap().then(function(map) {
-				leafletScope.$watch("decorations", function(newDecorations) {
-					for (var name in leafletDecorations) {
-						if (!isDefined(newDecorations) || !isDefined(newDecorations[name])) {
-							delete leafletDecorations[name];
-						}
-						map.removeLayer(leafletDecorations[name]);
-					}
-					
-					for (var newName in newDecorations) {
-						var decorationData = newDecorations[newName],
-							newDecoration = createDecoration(decorationData);
-
-						if (isDefined(newDecoration)) {
-							leafletDecorations[newName] = newDecoration;
-							map.addLayer(newDecoration);
-							setDecorationOptions(newDecoration, decorationData);
-						}
-					}
-				}, true);
-			});
-		}
-	};
-}]);
-angular.module("leaflet-directive").directive('layercontrol', ["$log", "leafletData", "leafletHelpers", function ($log, leafletData, leafletHelpers) {
-  return {
-    restrict: "E",
-    scope: {
-    },
-    replace: true,
-    transclude: false,
-    require: '^leaflet',
-    controller: ["$scope", "$element", "$sce", function ($scope, $element, $sce) {
-      $log.debug('[Angular Directive - Layers] layers', $scope, $element);
-      var safeApply = leafletHelpers.safeApply,
-        isDefined = leafletHelpers.isDefined;
-      angular.extend($scope, {
-        baselayer: '',
-        icons: {
-          uncheck: 'fa fa-check-square-o',
-          check: 'fa fa-square-o',
-          radio: 'fa fa-dot-circle-o',
-          unradio: 'fa fa-circle-o',
-          up: 'fa fa-angle-up',
-          down: 'fa fa-angle-down',
-          open: 'fa fa-angle-double-down',
-          close: 'fa fa-angle-double-up'
-        },
-        changeBaseLayer: function(key, e) {
-          leafletHelpers.safeApply($scope, function(scp) {
-            scp.baselayer = key;
-            leafletData.getMap().then(function(map) {
-              leafletData.getLayers().then(function(leafletLayers) {
-                if(map.hasLayer(leafletLayers.baselayers[key])) {
-                  return;
-                }
-                for(var i in scp.layers.baselayers) {
-                  scp.layers.baselayers[i].icon = scp.icons.unradio;
-                  if(map.hasLayer(leafletLayers.baselayers[i])) {
-                    map.removeLayer(leafletLayers.baselayers[i]);
-                  }
-                }
-                map.addLayer(leafletLayers.baselayers[key]);
-                scp.layers.baselayers[key].icon = $scope.icons.radio;
-              });
-            });
-          });
-          e.preventDefault();
-        },
-        moveLayer: function(ly, newIndex, e) {
-            var delta = Object.keys($scope.layers.baselayers).length;
-            if(newIndex >= (1+delta) && newIndex <= ($scope.overlaysArray.length+delta)) {
-                var oldLy;
-                for(var key in $scope.layers.overlays) {
-                    if($scope.layers.overlays[key].index === newIndex) {
-                        oldLy = $scope.layers.overlays[key];
-                        break;
-                    }
-                }
-                if(oldLy) {
-                    safeApply($scope, function() {
-                        oldLy.index = ly.index;
-                        ly.index = newIndex;
-                    });
-                }
-            }
-            e.stopPropagation();
-            e.preventDefault();
-        },
-        initIndex: function(layer, idx) {
-            var delta = Object.keys($scope.layers.baselayers).length;
-            layer.index = isDefined(layer.index)? layer.index:idx+delta+1;
-        },
-        toggleOpacity: function(e, layer) {
-            $log.debug('Event', e);
-            if(layer.visible) {
-                var el = angular.element(e.currentTarget);
-                el.toggleClass($scope.icons.close + ' ' + $scope.icons.open);
-                el = el.parents('.lf-row').find('.lf-opacity');
-                el.toggle('fast', function() {
-                    safeApply($scope, function() {
-                        layer.opacityControl = !layer.opacityControl;
-                    });
-                });
-            }
-            e.stopPropagation();
-            e.preventDefault();
-        },
-        unsafeHTML: function(html) {
-          return $sce.trustAsHtml(html);
-        }
-      });
-
-      var div = $element.get(0);
-      if (!L.Browser.touch) {
-          L.DomEvent.disableClickPropagation(div);
-          L.DomEvent.on(div, 'mousewheel', L.DomEvent.stopPropagation);
-      } else {
-          L.DomEvent.on(div, 'click', L.DomEvent.stopPropagation);
-      }
-    }],
-    template:
-      '<div class="angular-leaflet-control-layers" ng-show="overlaysArray.length">' +
-        '<div class="lf-baselayers">' +
-            '<div class="lf-row" ng-repeat="(key, layer) in layers.baselayers">' +
-                '<label class="lf-icon-bl" ng-click="changeBaseLayer(key, $event)">' +
-                    '<input class="leaflet-control-layers-selector" type="radio" name="lf-radio" ' +
-                        'ng-show="false" ng-checked="baselayer === key" ng-value="key" /> ' +
-                    '<i class="lf-icon lf-icon-radio" ng-class="layer.icon"></i>' +
-                    '<div class="lf-text">{{layer.name}}</div>' +
-                '</label>' +
-            '</div>' +
-        '</div>' +
-        '<div class="lf-overlays">' +
-            '<div class="lf-container">' +
-                '<div class="lf-row" ng-repeat="layer in overlaysArray | orderBy:\'index\':order" ng-init="initIndex(layer, $index)">' +
-                    '<label class="lf-icon-ol">' +
-                        '<input class="lf-control-layers-selector" type="checkbox" ng-show="false" ng-model="layer.visible"/> ' +
-                        '<i class="lf-icon lf-icon-check" ng-class="layer.icon"></i>' +
-                        '<div class="lf-text">{{layer.name}}</div>' +
-                        '<div class="lf-icons">' +
-                            '<i class="lf-icon lf-up" ng-class="icons.up" ng-click="moveLayer(layer, layer.index - orderNumber, $event)"></i> ' +
-                            '<i class="lf-icon lf-down" ng-class="icons.down" ng-click="moveLayer(layer, layer.index + orderNumber, $event)"></i> ' +
-                            '<i class="lf-icon lf-open" ng-class="layer.opacityControl? icons.close:icons.open" ng-click="toggleOpacity($event, layer)"></i>' +
-                        '</div>' +
-                    '</label>'+
-                    '<div class="lf-legend" ng-if="layer.legend" ng-bind-html="unsafeHTML(layer.legend)"></div>' +
-                    '<div class="lf-opacity" ng-show="layer.visible &amp;&amp; layer.opacityControl">' +
-                        '<input type="text" class="lf-opacity-control" name="lf-opacity-control" data-key="{{layer.index}}" />' +
-                    '</div>' +
-                '</div>' +
-            '</div>' +
-        '</div>' +
-      '</div>',
-    link: function(scope, element, attrs, controller) {
-        var isDefined = leafletHelpers.isDefined,
-        leafletScope = controller.getLeafletScope(),
-        layers = leafletScope.layers;
-
-        // Setting layer stack order.
-        attrs.order = (isDefined(attrs.order) && (attrs.order === 'normal' || attrs.order === 'reverse'))? attrs.order:'normal';
-        scope.order = attrs.order === 'normal';
-        scope.orderNumber = attrs.order === 'normal'? -1:1;
-
-        scope.layers = layers;
-        controller.getMap().then(function(map) {
-            // Do we have a baselayers property?
-            if (!isDefined(layers) || !isDefined(layers.baselayers) || Object.keys(layers.baselayers).length === 0) {
-                // No baselayers property
-                $log.error('[AngularJS - Leaflet] At least one baselayer has to be defined');
-                return;
-            }
-
-            leafletScope.$watch('layers.baselayers', function(newBaseLayers) {
-                leafletData.getLayers().then(function(leafletLayers) {
-                    var key;
-                    for(key in newBaseLayers) {
-                      if(map.hasLayer(leafletLayers.baselayers[key])) {
-                        newBaseLayers[key].icon = scope.icons.radio;
-                      } else {
-                        newBaseLayers[key].icon = scope.icons.unradio;
-                      }
-                    }
-                });
-            });
-
-            leafletScope.$watch('layers.overlays', function(newOverlayLayers) {
-                var overlaysArray = [];
-                leafletData.getLayers().then(function(leafletLayers) {
-                    for(var key in newOverlayLayers) {
-                        newOverlayLayers[key].icon = scope.icons[(newOverlayLayers[key].visible? 'uncheck':'check')];
-                        overlaysArray.push(newOverlayLayers[key]);
-                        if(isDefined(newOverlayLayers[key].index) && leafletLayers.overlays[key].setZIndex) {
-                            leafletLayers.overlays[key].setZIndex(newOverlayLayers[key].index);
-                        }
-                    }
-                });
-
-                var unreg = scope.$watch(function() {
-                    if(element.children().size() > 1) {
-                        element.find('.lf-overlays').trigger('resize');
-                        return element.find('.lf-opacity').size() === Object.keys(layers.overlays).length;
-                    }
-                }, function(el) {
-                    if(el === true) {
-                        if(isDefined(element.find('.lf-opacity-control').ionRangeSlider)) {
-                            element.find('.lf-opacity-control').each(function(idx, inp) {
-                                var delta =  Object.keys(layers.baselayers).length,
-                                    lyAux;
-                                for(var key in scope.overlaysArray) {
-                                    if(scope.overlaysArray[key].index === idx+delta+1) {
-                                        lyAux = scope.overlaysArray[key];
-                                    }
-                                }
-
-                                var input = angular.element(inp),
-                                    op = isDefined(lyAux) && isDefined(lyAux.layerOptions)?
-                                        lyAux.layerOptions.opacity:undefined;
-                                input.ionRangeSlider({
-                                    min: 0,
-                                    from: isDefined(op)? Math.ceil(op*100):100,
-                                    step: 1,
-                                    max: 100,
-                                    prettify: false,
-                                    hasGrid: false,
-                                    hideMinMax: true,
-                                    onChange: function(val) {
-                                        leafletData.getLayers().then(function(leafletLayers) {
-                                            var key = val.input.data().key;
-                                            var ly, layer;
-                                            for(var k in layers.overlays) {
-                                                if(layers.overlays[k].index === key) {
-                                                    ly = leafletLayers.overlays[k];
-                                                    layer = layers.overlays[k];
-                                                    break;
-                                                }
-                                            }
-                                            if(map.hasLayer(ly)) {
-                                                layer.layerOptions = isDefined(layer.layerOptions)? layer.layerOptions:{};
-                                                layer.layerOptions.opacity = val.input.val()/100;
-                                                if(ly.setOpacity) {
-                                                    ly.setOpacity(val.input.val()/100);
-                                                }
-                                                if(ly.getLayers && ly.eachLayer) {
-                                                    ly.eachLayer(function(lay) {
-                                                        if(lay.setOpacity) {
-                                                            lay.setOpacity(val.input.val()/100);
-                                                        }
-                                                    });
-                                                }
-                                            }
-                                        });
-                                    }
-                                });
-                            });
-                        } else {
-                            $log.warn('[AngularJS - Leaflet] Ion Slide Range Plugin is not loaded');
-                        }
-                        unreg();
-                    }
-                });
-
-                scope.overlaysArray = overlaysArray;
-            }, true);
-        });
-    }
-  };
-}]);
-
-angular.module("leaflet-directive").service('leafletData', ["$log", "$q", "leafletHelpers", function ($log, $q, leafletHelpers) {
-    var getDefer = leafletHelpers.getDefer,
-        getUnresolvedDefer = leafletHelpers.getUnresolvedDefer,
-        setResolvedDefer = leafletHelpers.setResolvedDefer;
-
-    var maps = {};
-    var tiles = {};
-    var layers = {};
-    var paths = {};
-    var markers = {};
-    var geoJSON = {};
-    var utfGrid = {};
-    var decorations = {};
-
-    this.setMap = function(leafletMap, scopeId) {
-        var defer = getUnresolvedDefer(maps, scopeId);
-        defer.resolve(leafletMap);
-        setResolvedDefer(maps, scopeId);
-    };
-
-    this.getMap = function(scopeId) {
-        var defer = getDefer(maps, scopeId);
-        return defer.promise;
-    };
-
-    this.unresolveMap = function (scopeId) {
-        var id = leafletHelpers.obtainEffectiveMapId(maps, scopeId);
-        maps[id] = undefined;
-    };
-
-    this.getPaths = function(scopeId) {
-        var defer = getDefer(paths, scopeId);
-        return defer.promise;
-    };
-
-    this.setPaths = function(leafletPaths, scopeId) {
-        var defer = getUnresolvedDefer(paths, scopeId);
-        defer.resolve(leafletPaths);
-        setResolvedDefer(paths, scopeId);
-    };
-
-    this.getMarkers = function(scopeId) {
-        var defer = getDefer(markers, scopeId);
-        return defer.promise;
-    };
-
-    this.setMarkers = function(leafletMarkers, scopeId) {
-        var defer = getUnresolvedDefer(markers, scopeId);
-        defer.resolve(leafletMarkers);
-        setResolvedDefer(markers, scopeId);
-    };
-
-    this.getLayers = function(scopeId) {
-        var defer = getDefer(layers, scopeId);
-        return defer.promise;
-    };
-
-    this.setLayers = function(leafletLayers, scopeId) {
-        var defer = getUnresolvedDefer(layers, scopeId);
-        defer.resolve(leafletLayers);
-        setResolvedDefer(layers, scopeId);
-    };
-    
-    this.getUTFGrid = function(scopeId) {
-        var defer = getDefer(utfGrid, scopeId);
-        return defer.promise;
-    };
-    
-    this.setUTFGrid = function(leafletUTFGrid, scopeId) {
-        var defer = getUnresolvedDefer(utfGrid, scopeId);
-        defer.resolve(leafletUTFGrid);
-        setResolvedDefer(utfGrid, scopeId);
-    };
-
-    this.setTiles = function(leafletTiles, scopeId) {
-        var defer = getUnresolvedDefer(tiles, scopeId);
-        defer.resolve(leafletTiles);
-        setResolvedDefer(tiles, scopeId);
-    };
-
-    this.getTiles = function(scopeId) {
-        var defer = getDefer(tiles, scopeId);
-        return defer.promise;
-    };
-
-    this.setGeoJSON = function(leafletGeoJSON, scopeId) {
-        var defer = getUnresolvedDefer(geoJSON, scopeId);
-        defer.resolve(leafletGeoJSON);
-        setResolvedDefer(geoJSON, scopeId);
-    };
-
-    this.getGeoJSON = function(scopeId) {
-        var defer = getDefer(geoJSON, scopeId);
-        return defer.promise;
-    };
-
-    this.setDecorations = function(leafletDecorations, scopeId) {
-        var defer = getUnresolvedDefer(decorations, scopeId);
-        defer.resolve(leafletDecorations);
-        setResolvedDefer(decorations, scopeId);
-    };
-
-    this.getDecorations = function(scopeId) {
-        var defer = getDefer(decorations, scopeId);
-        return defer.promise;
-    };
-}]);
-
-angular.module("leaflet-directive").factory('leafletMapDefaults', ["$q", "leafletHelpers", function ($q, leafletHelpers) {
-    function _getDefaults() {
-        return {
-            keyboard: true,
-            dragging: true,
-            worldCopyJump: false,
-            doubleClickZoom: true,
-            scrollWheelZoom: true,
-            touchZoom: true,
-            zoomControl: true,
-            zoomsliderControl: false,
-            zoomControlPosition: 'topleft',
-            attributionControl: true,
-            controls: {
-                layers: {
-                    visible: true,
-                    position: 'topright',
-                    collapsed: true
-                }
-            },
-            crs: L.CRS.EPSG3857,
-            tileLayer: '//{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            tileLayerOptions: {
-                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            },
-            path: {
-                weight: 10,
-                opacity: 1,
-                color: '#0000ff'
-            },
-            center: {
-                lat: 0,
-                lng: 0,
-                zoom: 1
-            }
-        };
-    }
-
-    var isDefined = leafletHelpers.isDefined,
-        isObject = leafletHelpers.isObject,
-        obtainEffectiveMapId = leafletHelpers.obtainEffectiveMapId,
-        defaults = {};
-
-    // Get the _defaults dictionary, and override the properties defined by the user
-    return {
-        getDefaults: function (scopeId) {
-            var mapId = obtainEffectiveMapId(defaults, scopeId);
-            return defaults[mapId];
-        },
-
-        getMapCreationDefaults: function (scopeId) {
-            var mapId = obtainEffectiveMapId(defaults, scopeId);
-            var d = defaults[mapId];
-
-            var mapDefaults = {
-                maxZoom: d.maxZoom,
-                keyboard: d.keyboard,
-                dragging: d.dragging,
-                zoomControl: d.zoomControl,
-                doubleClickZoom: d.doubleClickZoom,
-                scrollWheelZoom: d.scrollWheelZoom,
-                touchZoom: d.touchZoom,
-                attributionControl: d.attributionControl,
-                worldCopyJump: d.worldCopyJump,
-                crs: d.crs
-            };
-
-            if (isDefined(d.minZoom)) {
-                mapDefaults.minZoom = d.minZoom;
-            }
-
-            if (isDefined(d.zoomAnimation)) {
-                mapDefaults.zoomAnimation = d.zoomAnimation;
-            }
-
-            if (isDefined(d.fadeAnimation)) {
-                mapDefaults.fadeAnimation = d.fadeAnimation;
-            }
-
-            if (isDefined(d.markerZoomAnimation)) {
-                mapDefaults.markerZoomAnimation = d.markerZoomAnimation;
-            }
-
-            if (d.map) {
-                for (var option in d.map) {
-                    mapDefaults[option] = d.map[option];
-                }
-            }
-
-            return mapDefaults;
-        },
-
-        setDefaults: function (userDefaults, scopeId) {
-            var newDefaults = _getDefaults();
-
-            if (isDefined(userDefaults)) {
-                newDefaults.doubleClickZoom = isDefined(userDefaults.doubleClickZoom) ? userDefaults.doubleClickZoom : newDefaults.doubleClickZoom;
-                newDefaults.scrollWheelZoom = isDefined(userDefaults.scrollWheelZoom) ? userDefaults.scrollWheelZoom : newDefaults.doubleClickZoom;
-                newDefaults.touchZoom = isDefined(userDefaults.touchZoom) ? userDefaults.touchZoom : newDefaults.doubleClickZoom;
-                newDefaults.zoomControl = isDefined(userDefaults.zoomControl) ? userDefaults.zoomControl : newDefaults.zoomControl;
-                newDefaults.zoomsliderControl = isDefined(userDefaults.zoomsliderControl) ? userDefaults.zoomsliderControl : newDefaults.zoomsliderControl;
-                newDefaults.attributionControl = isDefined(userDefaults.attributionControl) ? userDefaults.attributionControl : newDefaults.attributionControl;
-                newDefaults.tileLayer = isDefined(userDefaults.tileLayer) ? userDefaults.tileLayer : newDefaults.tileLayer;
-                newDefaults.zoomControlPosition = isDefined(userDefaults.zoomControlPosition) ? userDefaults.zoomControlPosition : newDefaults.zoomControlPosition;
-                newDefaults.keyboard = isDefined(userDefaults.keyboard) ? userDefaults.keyboard : newDefaults.keyboard;
-                newDefaults.dragging = isDefined(userDefaults.dragging) ? userDefaults.dragging : newDefaults.dragging;
-
-                if (isDefined(userDefaults.controls)) {
-                    angular.extend(newDefaults.controls, userDefaults.controls);
-                }
-
-                if (isObject(userDefaults.crs)) {
-                    newDefaults.crs = userDefaults.crs;
-                } else if (isDefined(L.CRS[userDefaults.crs])) {
-                    newDefaults.crs = L.CRS[userDefaults.crs];
-                }
-
-                if (isDefined(userDefaults.tileLayerOptions)) {
-                    angular.copy(userDefaults.tileLayerOptions, newDefaults.tileLayerOptions);
-                }
-
-                if (isDefined(userDefaults.maxZoom)) {
-                    newDefaults.maxZoom = userDefaults.maxZoom;
-                }
-
-                if (isDefined(userDefaults.minZoom)) {
-                    newDefaults.minZoom = userDefaults.minZoom;
-                }
-
-                if (isDefined(userDefaults.zoomAnimation)) {
-                    newDefaults.zoomAnimation = userDefaults.zoomAnimation;
-                }
-
-                if (isDefined(userDefaults.fadeAnimation)) {
-                    newDefaults.fadeAnimation = userDefaults.fadeAnimation;
-                }
-
-                if (isDefined(userDefaults.markerZoomAnimation)) {
-                    newDefaults.markerZoomAnimation = userDefaults.markerZoomAnimation;
-                }
-
-                if (isDefined(userDefaults.worldCopyJump)) {
-                    newDefaults.worldCopyJump = userDefaults.worldCopyJump;
-                }
-
-                if (isDefined(userDefaults.map)) {
-                    newDefaults.map = userDefaults.map;
-                }
-            }
-
-            var mapId = obtainEffectiveMapId(defaults, scopeId);
-            defaults[mapId] = newDefaults;
-            return newDefaults;
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").factory('leafletEvents', ["$rootScope", "$q", "$log", "leafletHelpers", function ($rootScope, $q, $log, leafletHelpers) {
-    var safeApply = leafletHelpers.safeApply,
-        isDefined = leafletHelpers.isDefined,
-        isObject = leafletHelpers.isObject,
-        Helpers = leafletHelpers;
-
-    var _getAvailableLabelEvents = function() {
-        return [
-            'click',
-            'dblclick',
-            'mousedown',
-            'mouseover',
-            'mouseout',
-            'contextmenu'
-        ];
-    };
-
-    var genLabelEvents = function(leafletScope, logic, marker, name) {
-        var labelEvents = _getAvailableLabelEvents();
-        var scopeWatchName = "markers." + name;
-        for (var i = 0; i < labelEvents.length; i++) {
-            var eventName = labelEvents[i];
-            marker.label.on(eventName, genDispatchLabelEvent(leafletScope, eventName, logic, marker.label, scopeWatchName));
-        }
-    };
-
-    var genDispatchMarkerEvent = function(eventName, logic, leafletScope, marker, name, markerData) {
-        return function(e) {
-            var broadcastName = 'leafletDirectiveMarker.' + eventName;
-
-            // Broadcast old marker click name for backwards compatibility
-            if (eventName === "click") {
-                safeApply(leafletScope, function() {
-                    $rootScope.$broadcast('leafletDirectiveMarkersClick', name);
-                });
-            } else if (eventName === 'dragend') {
-                safeApply(leafletScope, function() {
-                    markerData.lat = marker.getLatLng().lat;
-                    markerData.lng = marker.getLatLng().lng;
-                });
-                if (markerData.message && markerData.focus === true) {
-                    marker.openPopup();
-                }
-            }
-
-            safeApply(leafletScope, function(scope){
-                if (logic === "emit") {
-                    scope.$emit(broadcastName, {
-                        markerName: name,
-                        leafletEvent: e
-                    });
-                } else {
-                    $rootScope.$broadcast(broadcastName, {
-                        markerName: name,
-                        leafletEvent: e
-                    });
-                }
-            });
-        };
-    };
-
-    var genDispatchPathEvent = function(eventName, logic, leafletScope, marker, name) {
-        return function(e) {
-            var broadcastName = 'leafletDirectivePath.' + eventName;
-
-            safeApply(leafletScope, function(scope){
-                if (logic === "emit") {
-                    scope.$emit(broadcastName, {
-                        pathName: name,
-                        leafletEvent: e
-                    });
-                } else {
-                    $rootScope.$broadcast(broadcastName, {
-                        pathName: name,
-                        leafletEvent: e
-                    });
-                }
-            });
-        };
-    };
-
-    var genDispatchLabelEvent = function(scope, eventName, logic, label, scope_watch_name) {
-        return function(e) {
-            // Put together broadcast name
-            var broadcastName = 'leafletDirectiveLabel.' + eventName;
-            var markerName = scope_watch_name.replace('markers.', '');
-
-            // Safely broadcast the event
-            safeApply(scope, function(scope) {
-                if (logic === "emit") {
-                    scope.$emit(broadcastName, {
-                        leafletEvent : e,
-                        label: label,
-                        markerName: markerName
-                    });
-                } else if (logic === "broadcast") {
-                    $rootScope.$broadcast(broadcastName, {
-                        leafletEvent : e,
-                        label: label,
-                        markerName: markerName
-                    });
-                }
-            });
-        };
-    };
-
-    var _getAvailableMarkerEvents = function() {
-        return [
-            'click',
-            'dblclick',
-            'mousedown',
-            'mouseover',
-            'mouseout',
-            'contextmenu',
-            'dragstart',
-            'drag',
-            'dragend',
-            'move',
-            'remove',
-            'popupopen',
-            'popupclose'
-        ];
-    };
-
-    var _getAvailablePathEvents = function() {
-        return [
-            'click',
-            'dblclick',
-            'mousedown',
-            'mouseover',
-            'mouseout',
-            'contextmenu',
-            'add',
-            'remove',
-            'popupopen',
-            'popupclose'
-        ];
-    };
-
-    return {
-        getAvailableMapEvents: function() {
-            return [
-                'click',
-                'dblclick',
-                'mousedown',
-                'mouseup',
-                'mouseover',
-                'mouseout',
-                'mousemove',
-                'contextmenu',
-                'focus',
-                'blur',
-                'preclick',
-                'load',
-                'unload',
-                'viewreset',
-                'movestart',
-                'move',
-                'moveend',
-                'dragstart',
-                'drag',
-                'dragend',
-                'zoomstart',
-                'zoomend',
-                'zoomlevelschange',
-                'resize',
-                'autopanstart',
-                'layeradd',
-                'layerremove',
-                'baselayerchange',
-                'overlayadd',
-                'overlayremove',
-                'locationfound',
-                'locationerror',
-                'popupopen',
-                'popupclose',
-                'draw:created',
-                'draw:edited',
-                'draw:deleted',
-                'draw:drawstart',
-                'draw:drawstop',
-                'draw:editstart',
-                'draw:editstop',
-                'draw:deletestart',
-                'draw:deletestop'
-            ];
-        },
-
-        genDispatchMapEvent: function(scope, eventName, logic) {
-            return function(e) {
-                // Put together broadcast name
-                var broadcastName = 'leafletDirectiveMap.' + eventName;
-                // Safely broadcast the event
-                safeApply(scope, function(scope) {
-                    if (logic === "emit") {
-                        scope.$emit(broadcastName, {
-                            leafletEvent : e
-                        });
-                    } else if (logic === "broadcast") {
-                        $rootScope.$broadcast(broadcastName, {
-                            leafletEvent : e
-                        });
-                    }
-                });
-            };
-        },
-
-        getAvailableMarkerEvents: _getAvailableMarkerEvents,
-
-        getAvailablePathEvents: _getAvailablePathEvents,
-
-        notifyCenterChangedToBounds: function(scope) {
-            scope.$broadcast("boundsChanged");
-        },
-
-        notifyCenterUrlHashChanged: function(scope, map, attrs, search) {
-            if (!isDefined(attrs.urlHashCenter)) {
-                return;
-            }
-            var center = map.getCenter();
-            var centerUrlHash = (center.lat).toFixed(4) + ":" + (center.lng).toFixed(4) + ":" + map.getZoom();
-            if (!isDefined(search.c) || search.c !== centerUrlHash) {
-                //$log.debug("notified new center...");
-                scope.$emit("centerUrlHash", centerUrlHash);
-            }
-        },
-
-        bindMarkerEvents: function(marker, name, markerData, leafletScope) {
-            var markerEvents = [];
-            var i;
-            var eventName;
-            var logic = "broadcast";
-
-            if (!isDefined(leafletScope.eventBroadcast)) {
-                // Backward compatibility, if no event-broadcast attribute, all events are broadcasted
-                markerEvents = _getAvailableMarkerEvents();
-            } else if (!isObject(leafletScope.eventBroadcast)) {
-                // Not a valid object
-                $log.error("[AngularJS - Leaflet] event-broadcast must be an object check your model.");
-            } else {
-                // We have a possible valid object
-                if (!isDefined(leafletScope.eventBroadcast.marker)) {
-                    // We do not have events enable/disable do we do nothing (all enabled by default)
-                    markerEvents = _getAvailableMarkerEvents();
-                } else if (!isObject(leafletScope.eventBroadcast.marker)) {
-                    // Not a valid object
-                    $log.warn("[AngularJS - Leaflet] event-broadcast.marker must be an object check your model.");
-                } else {
-                    // We have a possible valid map object
-                    // Event propadation logic
-                    if (leafletScope.eventBroadcast.marker.logic !== undefined && leafletScope.eventBroadcast.marker.logic !== null) {
-                        // We take care of possible propagation logic
-                        if (leafletScope.eventBroadcast.marker.logic !== "emit" && leafletScope.eventBroadcast.marker.logic !== "broadcast") {
-                            // This is an error
-                            $log.warn("[AngularJS - Leaflet] Available event propagation logic are: 'emit' or 'broadcast'.");
-                        } else if (leafletScope.eventBroadcast.marker.logic === "emit") {
-                            logic = "emit";
-                        }
-                    }
-                    // Enable / Disable
-                    var markerEventsEnable = false, markerEventsDisable = false;
-                    if (leafletScope.eventBroadcast.marker.enable !== undefined && leafletScope.eventBroadcast.marker.enable !== null) {
-                        if (typeof leafletScope.eventBroadcast.marker.enable === 'object') {
-                            markerEventsEnable = true;
-                        }
-                    }
-                    if (leafletScope.eventBroadcast.marker.disable !== undefined && leafletScope.eventBroadcast.marker.disable !== null) {
-                        if (typeof leafletScope.eventBroadcast.marker.disable === 'object') {
-                            markerEventsDisable = true;
-                        }
-                    }
-                    if (markerEventsEnable && markerEventsDisable) {
-                        // Both are active, this is an error
-                        $log.warn("[AngularJS - Leaflet] can not enable and disable events at the same time");
-                    } else if (!markerEventsEnable && !markerEventsDisable) {
-                        // Both are inactive, this is an error
-                        $log.warn("[AngularJS - Leaflet] must enable or disable events");
-                    } else {
-                        // At this point the marker object is OK, lets enable or disable events
-                        if (markerEventsEnable) {
-                            // Enable events
-                            for (i = 0; i < leafletScope.eventBroadcast.marker.enable.length; i++) {
-                                eventName = leafletScope.eventBroadcast.marker.enable[i];
-                                // Do we have already the event enabled?
-                                if (markerEvents.indexOf(eventName) !== -1) {
-                                    // Repeated event, this is an error
-                                    $log.warn("[AngularJS - Leaflet] This event " + eventName + " is already enabled");
-                                } else {
-                                    // Does the event exists?
-                                    if (_getAvailableMarkerEvents().indexOf(eventName) === -1) {
-                                        // The event does not exists, this is an error
-                                        $log.warn("[AngularJS - Leaflet] This event " + eventName + " does not exist");
-                                    } else {
-                                        // All ok enable the event
-                                        markerEvents.push(eventName);
-                                    }
-                                }
-                            }
-                        } else {
-                            // Disable events
-                            markerEvents = _getAvailableMarkerEvents();
-                            for (i = 0; i < leafletScope.eventBroadcast.marker.disable.length; i++) {
-                                eventName = leafletScope.eventBroadcast.marker.disable[i];
-                                var index = markerEvents.indexOf(eventName);
-                                if (index === -1) {
-                                    // The event does not exist
-                                    $log.warn("[AngularJS - Leaflet] This event " + eventName + " does not exist or has been already disabled");
-
-                                } else {
-                                    markerEvents.splice(index, 1);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            for (i = 0; i < markerEvents.length; i++) {
-                eventName = markerEvents[i];
-                marker.on(eventName, genDispatchMarkerEvent(eventName, logic, leafletScope, marker, name, markerData));
-            }
-
-            if (Helpers.LabelPlugin.isLoaded() && isDefined(marker.label)) {
-                genLabelEvents(leafletScope, logic, marker, name);
-            }
-        },
-
-        bindPathEvents: function(path, name, pathData, leafletScope) {
-            var pathEvents = [];
-            var i;
-            var eventName;
-            var logic = "broadcast";
-
-            if (!isDefined(leafletScope.eventBroadcast)) {
-                // Backward compatibility, if no event-broadcast attribute, all events are broadcasted
-                pathEvents = _getAvailablePathEvents();
-            } else if (!isObject(leafletScope.eventBroadcast)) {
-                // Not a valid object
-                $log.error("[AngularJS - Leaflet] event-broadcast must be an object check your model.");
-            } else {
-                // We have a possible valid object
-                if (!isDefined(leafletScope.eventBroadcast.path)) {
-                    // We do not have events enable/disable do we do nothing (all enabled by default)
-                    pathEvents = _getAvailablePathEvents();
-                } else if (isObject(leafletScope.eventBroadcast.paths)) {
-                    // Not a valid object
-                    $log.warn("[AngularJS - Leaflet] event-broadcast.path must be an object check your model.");
-                } else {
-                    // We have a possible valid map object
-                    // Event propadation logic
-                    if (leafletScope.eventBroadcast.path.logic !== undefined && leafletScope.eventBroadcast.path.logic !== null) {
-                        // We take care of possible propagation logic
-                        if (leafletScope.eventBroadcast.path.logic !== "emit" && leafletScope.eventBroadcast.path.logic !== "broadcast") {
-                            // This is an error
-                            $log.warn("[AngularJS - Leaflet] Available event propagation logic are: 'emit' or 'broadcast'.");
-                        } else if (leafletScope.eventBroadcast.path.logic === "emit") {
-                            logic = "emit";
-                        }
-                    }
-                    // Enable / Disable
-                    var pathEventsEnable = false, pathEventsDisable = false;
-                    if (leafletScope.eventBroadcast.path.enable !== undefined && leafletScope.eventBroadcast.path.enable !== null) {
-                        if (typeof leafletScope.eventBroadcast.path.enable === 'object') {
-                            pathEventsEnable = true;
-                        }
-                    }
-                    if (leafletScope.eventBroadcast.path.disable !== undefined && leafletScope.eventBroadcast.path.disable !== null) {
-                        if (typeof leafletScope.eventBroadcast.path.disable === 'object') {
-                            pathEventsDisable = true;
-                        }
-                    }
-                    if (pathEventsEnable && pathEventsDisable) {
-                        // Both are active, this is an error
-                        $log.warn("[AngularJS - Leaflet] can not enable and disable events at the same time");
-                    } else if (!pathEventsEnable && !pathEventsDisable) {
-                        // Both are inactive, this is an error
-                        $log.warn("[AngularJS - Leaflet] must enable or disable events");
-                    } else {
-                        // At this point the path object is OK, lets enable or disable events
-                        if (pathEventsEnable) {
-                            // Enable events
-                            for (i = 0; i < leafletScope.eventBroadcast.path.enable.length; i++) {
-                                eventName = leafletScope.eventBroadcast.path.enable[i];
-                                // Do we have already the event enabled?
-                                if (pathEvents.indexOf(eventName) !== -1) {
-                                    // Repeated event, this is an error
-                                    $log.warn("[AngularJS - Leaflet] This event " + eventName + " is already enabled");
-                                } else {
-                                    // Does the event exists?
-                                    if (_getAvailablePathEvents().indexOf(eventName) === -1) {
-                                        // The event does not exists, this is an error
-                                        $log.warn("[AngularJS - Leaflet] This event " + eventName + " does not exist");
-                                    } else {
-                                        // All ok enable the event
-                                        pathEvents.push(eventName);
-                                    }
-                                }
-                            }
-                        } else {
-                            // Disable events
-                            pathEvents = _getAvailablePathEvents();
-                            for (i = 0; i < leafletScope.eventBroadcast.path.disable.length; i++) {
-                                eventName = leafletScope.eventBroadcast.path.disable[i];
-                                var index = pathEvents.indexOf(eventName);
-                                if (index === -1) {
-                                    // The event does not exist
-                                    $log.warn("[AngularJS - Leaflet] This event " + eventName + " does not exist or has been already disabled");
-
-                                } else {
-                                    pathEvents.splice(index, 1);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            for (i = 0; i < pathEvents.length; i++) {
-                eventName = pathEvents[i];
-                path.on(eventName, genDispatchPathEvent(eventName, logic, leafletScope, pathEvents, name));
-            }
-
-            if (Helpers.LabelPlugin.isLoaded() && isDefined(path.label)) {
-                genLabelEvents(leafletScope, logic, path, name);
-            }
-        }
-
-    };
-}]);
-
-
-angular.module("leaflet-directive").factory('leafletLayerHelpers', ["$rootScope", "$log", "leafletHelpers", function ($rootScope, $log, leafletHelpers) {
-    var Helpers = leafletHelpers,
-        isString = leafletHelpers.isString,
-        isObject = leafletHelpers.isObject,
-        isDefined = leafletHelpers.isDefined;
-
-    var utfGridCreateLayer = function(params) {
-        if (!Helpers.UTFGridPlugin.isLoaded()) {
-            $log.error('[AngularJS - Leaflet] The UTFGrid plugin is not loaded.');
-            return;
-        }
-        var utfgrid = new L.UtfGrid(params.url, params.pluginOptions);
-
-        utfgrid.on('mouseover', function(e) {
-            $rootScope.$broadcast('leafletDirectiveMap.utfgridMouseover', e);
-        });
-
-        utfgrid.on('mouseout', function(e) {
-            $rootScope.$broadcast('leafletDirectiveMap.utfgridMouseout', e);
-        });
-
-        utfgrid.on('click', function(e) {
-            $rootScope.$broadcast('leafletDirectiveMap.utfgridClick', e);
-        });
-
-        return utfgrid;
-    };
-
-    var layerTypes = {
-        xyz: {
-            mustHaveUrl: true,
-            createLayer: function(params) {
-                return L.tileLayer(params.url, params.options);
-            }
-        },
-        mapbox: {
-            mustHaveKey: true,
-            createLayer: function(params) {
-                var url = '//{s}.tiles.mapbox.com/v3/' + params.key + '/{z}/{x}/{y}.png';
-                return L.tileLayer(url, params.options);
-            }
-        },
-        geoJSON: {
-            mustHaveUrl: true,
-            createLayer: function(params) {
-                if (!Helpers.GeoJSONPlugin.isLoaded()) {
-                    return;
-                }
-                return new L.TileLayer.GeoJSON(params.url, params.pluginOptions, params.options);
-            }
-        },
-        utfGrid: {
-            mustHaveUrl: true,
-            createLayer: utfGridCreateLayer
-        },
-        cartodbTiles: {
-            mustHaveKey: true,
-            createLayer: function(params) {
-                var url = '//' + params.user + '.cartodb.com/api/v1/map/' + params.key + '/{z}/{x}/{y}.png';
-                return L.tileLayer(url, params.options);
-            }
-        },
-        cartodbUTFGrid: {
-            mustHaveKey: true,
-            mustHaveLayer : true,
-            createLayer: function(params) {
-                params.url = '//' + params.user + '.cartodb.com/api/v1/map/' + params.key + '/' + params.layer + '/{z}/{x}/{y}.grid.json';
-                return utfGridCreateLayer(params);
-            }
-        },
-        cartodbInteractive: {
-            mustHaveKey: true,
-            mustHaveLayer : true,
-            createLayer: function(params) {
-                var tilesURL = '//' + params.user + '.cartodb.com/api/v1/map/' + params.key + '/{z}/{x}/{y}.png';
-                var tileLayer = L.tileLayer(tilesURL, params.options);
-                params.url = '//' + params.user + '.cartodb.com/api/v1/map/' + params.key + '/' + params.layer + '/{z}/{x}/{y}.grid.json';
-                var utfLayer = utfGridCreateLayer(params);
-                return L.layerGroup([tileLayer, utfLayer]);
-            }
-        },
-        wms: {
-            mustHaveUrl: true,
-            createLayer: function(params) {
-                return L.tileLayer.wms(params.url, params.options);
-            }
-        },
-        wmts: {
-            mustHaveUrl: true,
-            createLayer: function(params) {
-                return L.tileLayer.wmts(params.url, params.options);
-            }
-        },
-        wfs: {
-            mustHaveUrl: true,
-            mustHaveLayer : true,
-            createLayer: function(params) {
-                if (!Helpers.WFSLayerPlugin.isLoaded()) {
-                    return;
-                }
-                var options = angular.copy(params.options);
-                if(options.crs && 'string' === typeof options.crs) {
-                    /*jshint -W061 */
-                    options.crs = eval(options.crs);
-                }
-                return new L.GeoJSON.WFS(params.url, params.layer, options);
-            }
-        },
-        group: {
-            mustHaveUrl: false,
-            createLayer: function () {
-                return L.layerGroup();
-            }
-        },
-        featureGroup: {
-            mustHaveUrl: false,
-            createLayer: function () {
-                return L.featureGroup();
-            }
-        },
-        google: {
-            mustHaveUrl: false,
-            createLayer: function(params) {
-                var type = params.type || 'SATELLITE';
-                if (!Helpers.GoogleLayerPlugin.isLoaded()) {
-                    return;
-                }
-                return new L.Google(type, params.options);
-            }
-        },
-        china:{
-            mustHaveUrl:false,
-            createLayer:function(params){
-                var type = params.type || '';
-                if(!Helpers.ChinaLayerPlugin.isLoaded()){
-                    return;
-                }
-                return L.tileLayer.chinaProvider(type, params.options);
-            }
-        },
-        ags: {
-            mustHaveUrl: true,
-            createLayer: function(params) {
-                if (!Helpers.AGSLayerPlugin.isLoaded()) {
-                    return;
-                }
-
-                var options = angular.copy(params.options);
-                angular.extend(options, {
-                    url: params.url
-                });
-                var layer = new lvector.AGS(options);
-                layer.onAdd = function(map) {
-                    this.setMap(map);
-                };
-                layer.onRemove = function() {
-                    this.setMap(null);
-                };
-                return layer;
-            }
-        },
-        dynamic: {
-            mustHaveUrl: true,
-            createLayer: function(params) {
-                if (!Helpers.DynamicMapLayerPlugin.isLoaded()) {
-                    return;
-                }
-                return L.esri.dynamicMapLayer(params.url, params.options);
-            }
-        },
-        markercluster: {
-            mustHaveUrl: false,
-            createLayer: function(params) {
-                if (!Helpers.MarkerClusterPlugin.isLoaded()) {
-                    $log.error('[AngularJS - Leaflet] The markercluster plugin is not loaded.');
-                    return;
-                }
-                return new L.MarkerClusterGroup(params.options);
-            }
-        },
-        bing: {
-            mustHaveUrl: false,
-            createLayer: function(params) {
-                if (!Helpers.BingLayerPlugin.isLoaded()) {
-                    return;
-                }
-                return new L.BingLayer(params.key, params.options);
-            }
-        },
-        heatmap: {
-            mustHaveUrl: false,
-            mustHaveData: true,
-            createLayer: function(params) {
-                if (!Helpers.HeatMapLayerPlugin.isLoaded()) {
-                    return;
-                }
-                var layer = new L.TileLayer.WebGLHeatMap(params.options);
-                if (isDefined(params.data)) {
-                    layer.setData(params.data);
-                }
-
-                return layer;
-            }
-        },
-        yandex: {
-            mustHaveUrl: false,
-            createLayer: function(params) {
-                var type = params.type || 'map';
-                if (!Helpers.YandexLayerPlugin.isLoaded()) {
-                    return;
-                }
-                return new L.Yandex(type, params.options);
-            }
-        },
-        imageOverlay: {
-            mustHaveUrl: true,
-            mustHaveBounds : true,
-            createLayer: function(params) {
-                return L.imageOverlay(params.url, params.bounds, params.options);
-            }
-        },
-
-        // This "custom" type is used to accept every layer that user want to define himself.
-        // We can wrap these custom layers like heatmap or yandex, but it means a lot of work/code to wrap the world,
-        // so we let user to define their own layer outside the directive,
-        // and pass it on "createLayer" result for next processes
-        custom: {
-            createLayer: function (params) {
-                if (params.layer instanceof L.Class) {
-                    return angular.copy(params.layer);
-                }
-                else {
-                    $log.error('[AngularJS - Leaflet] A custom layer must be a leaflet Class');
-                }
-            }
-        },
-        cartodb: {
-            mustHaveUrl: true,
-            createLayer: function(params) {
-                return cartodb.createLayer(params.map, params.url);
-            }
-        }
-    };
-
-    function isValidLayerType(layerDefinition) {
-        // Check if the baselayer has a valid type
-        if (!isString(layerDefinition.type)) {
-            $log.error('[AngularJS - Leaflet] A layer must have a valid type defined.');
-            return false;
-        }
-
-        if (Object.keys(layerTypes).indexOf(layerDefinition.type) === -1) {
-            $log.error('[AngularJS - Leaflet] A layer must have a valid type: ' + Object.keys(layerTypes));
-            return false;
-        }
-
-        // Check if the layer must have an URL
-        if (layerTypes[layerDefinition.type].mustHaveUrl && !isString(layerDefinition.url)) {
-            $log.error('[AngularJS - Leaflet] A base layer must have an url');
-            return false;
-        }
-
-        if (layerTypes[layerDefinition.type].mustHaveData && !isDefined(layerDefinition.data)) {
-            $log.error('[AngularJS - Leaflet] The base layer must have a "data" array attribute');
-            return false;
-        }
-
-        if(layerTypes[layerDefinition.type].mustHaveLayer && !isDefined(layerDefinition.layer)) {
-            $log.error('[AngularJS - Leaflet] The type of layer ' + layerDefinition.type + ' must have an layer defined');
-            return false;
-        }
-
-        if (layerTypes[layerDefinition.type].mustHaveBounds && !isDefined(layerDefinition.bounds)) {
-            $log.error('[AngularJS - Leaflet] The type of layer ' + layerDefinition.type + ' must have bounds defined');
-            return false ;
-        }
-
-        if (layerTypes[layerDefinition.type].mustHaveKey && !isDefined(layerDefinition.key)) {
-            $log.error('[AngularJS - Leaflet] The type of layer ' + layerDefinition.type + ' must have key defined');
-            return false ;
-        }
-        return true;
-    }
-
-    return {
-        createLayer: function(layerDefinition) {
-            if (!isValidLayerType(layerDefinition)) {
-                return;
-            }
-
-            if (!isString(layerDefinition.name)) {
-                $log.error('[AngularJS - Leaflet] A base layer must have a name');
-                return;
-            }
-            if (!isObject(layerDefinition.layerParams)) {
-                layerDefinition.layerParams = {};
-            }
-            if (!isObject(layerDefinition.layerOptions)) {
-                layerDefinition.layerOptions = {};
-            }
-
-            // Mix the layer specific parameters with the general Leaflet options. Although this is an overhead
-            // the definition of a base layers is more 'clean' if the two types of parameters are differentiated
-            for (var attrname in layerDefinition.layerParams) {
-                layerDefinition.layerOptions[attrname] = layerDefinition.layerParams[attrname];
-            }
-
-            var params = {
-                url: layerDefinition.url,
-                data: layerDefinition.data,
-                options: layerDefinition.layerOptions,
-                layer: layerDefinition.layer,
-                type: layerDefinition.layerType,
-                bounds: layerDefinition.bounds,
-                key: layerDefinition.key,
-                pluginOptions: layerDefinition.pluginOptions,
-                user: layerDefinition.user
-            };
-
-            //TODO Add $watch to the layer properties
-            return layerTypes[layerDefinition.type].createLayer(params);
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").factory('leafletControlHelpers', ["$rootScope", "$log", "leafletHelpers", "leafletMapDefaults", function ($rootScope, $log, leafletHelpers, leafletMapDefaults) {
-    var isObject = leafletHelpers.isObject,
-        isDefined = leafletHelpers.isDefined;
-    var _layersControl;
-
-    var _controlLayersMustBeVisible = function(baselayers, overlays, mapId) {
-        var defaults = leafletMapDefaults.getDefaults(mapId);
-        if(!defaults.controls.layers.visible) {
-            return false;
-        }
-
-        var numberOfLayers = 0;
-        if (isObject(baselayers)) {
-            numberOfLayers += Object.keys(baselayers).length;
-        }
-        if (isObject(overlays)) {
-            numberOfLayers += Object.keys(overlays).length;
-        }
-        return numberOfLayers > 1;
-    };
-
-    var _createLayersControl = function(mapId) {
-        var defaults = leafletMapDefaults.getDefaults(mapId);
-        var controlOptions = {
-            collapsed: defaults.controls.layers.collapsed,
-            position: defaults.controls.layers.position
-        };
-
-        angular.extend(controlOptions, defaults.controls.layers.options);
-
-        var control;
-        if(defaults.controls.layers && isDefined(defaults.controls.layers.control)) {
-			control = defaults.controls.layers.control.apply(this, [[], [], controlOptions]);
+L.Control.FullScreen = L.Control.extend({
+	options: {
+		position: 'topleft',
+		title: 'Full Screen',
+		forceSeparateButton: false,
+		forcePseudoFullscreen: false
+	},
+	
+	onAdd: function (map) {
+		var className = 'leaflet-control-zoom-fullscreen', container;
+		
+		if (map.zoomControl && !this.options.forceSeparateButton) {
+			container = map.zoomControl._container;
 		} else {
-			control = new L.control.layers([], [], controlOptions);
+			container = L.DomUtil.create('div', 'leaflet-bar');
 		}
+		
+		this._createButton(this.options.title, className, container, this.toggleFullScreen, this);
 
-        return control;
-    };
+		return container;
+	},
+	
+	_createButton: function (title, className, container, fn, context) {
+		var link = L.DomUtil.create('a', className, container);
+		link.href = '#';
+		link.title = title;
 
-    return {
-        layersControlMustBeVisible: _controlLayersMustBeVisible,
+		L.DomEvent
+			.addListener(link, 'click', L.DomEvent.stopPropagation)
+			.addListener(link, 'click', L.DomEvent.preventDefault)
+			.addListener(link, 'click', fn, context);
+		
+		L.DomEvent
+			.addListener(container, fullScreenApi.fullScreenEventName, L.DomEvent.stopPropagation)
+			.addListener(container, fullScreenApi.fullScreenEventName, L.DomEvent.preventDefault)
+			.addListener(container, fullScreenApi.fullScreenEventName, this._handleEscKey, context);
+		
+		L.DomEvent
+			.addListener(document, fullScreenApi.fullScreenEventName, L.DomEvent.stopPropagation)
+			.addListener(document, fullScreenApi.fullScreenEventName, L.DomEvent.preventDefault)
+			.addListener(document, fullScreenApi.fullScreenEventName, this._handleEscKey, context);
 
-        updateLayersControl: function(map, mapId, loaded, baselayers, overlays, leafletLayers) {
-            var i;
-
-            var mustBeLoaded = _controlLayersMustBeVisible(baselayers, overlays, mapId);
-            if (isDefined(_layersControl) && loaded) {
-                for (i in leafletLayers.baselayers) {
-                    _layersControl.removeLayer(leafletLayers.baselayers[i]);
-                }
-                for (i in leafletLayers.overlays) {
-                    _layersControl.removeLayer(leafletLayers.overlays[i]);
-                }
-                _layersControl.removeFrom(map);
-            }
-
-            if (mustBeLoaded) {
-                _layersControl = _createLayersControl(mapId);
-                for (i in baselayers) {
-                    if (isDefined(leafletLayers.baselayers[i])) {
-                        _layersControl.addBaseLayer(leafletLayers.baselayers[i], baselayers[i].name);
-                    }
-                }
-                for (i in overlays) {
-                    if (isDefined(leafletLayers.overlays[i])) {
-                        _layersControl.addOverlay(leafletLayers.overlays[i], overlays[i].name);
-                    }
-                }
-                _layersControl.addTo(map);
-            }
-            return mustBeLoaded;
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").factory('leafletLegendHelpers', function () {
-	var _updateArcGISLegend = function(div, legendData) {
-		div.innerHTML = '';
-		if(legendData.error) {
-			div.innerHTML += '<div class="info-title alert alert-danger">' + legendData.error.message + '</div>';
-		} else {
-			for (var i = 0; i < legendData.layers.length; i++) {
-				var layer = legendData.layers[i];
-				div.innerHTML += '<div class="info-title" data-layerid="' + layer.layerId + '">' + layer.layerName + '</div>';
-				for(var j = 0; j < layer.legend.length; j++) {
-					var leg = layer.legend[j];
-					div.innerHTML +=
-						'<div class="inline" data-layerid="' + layer.layerId + '"><img src="data:' + leg.contentType + ';base64,' + leg.imageData + '" /></div>' +
-						'<div class="info-label" data-layerid="' + layer.layerId + '">' + leg.label + '</div>';
-				}
+		return link;
+	},
+	
+	toggleFullScreen: function () {
+		var map = this._map;
+		map._exitFired = false;
+		if (map._isFullscreen) {
+			if (fullScreenApi.supportsFullScreen && !this.options.forcePseudoFullscreen) {
+				fullScreenApi.cancelFullScreen(map._container);
+			} else {
+				L.DomUtil.removeClass(map._container, 'leaflet-pseudo-fullscreen');
 			}
+			map.invalidateSize();
+			map.fire('exitFullscreen');
+			map._exitFired = true;
+			map._isFullscreen = false;
 		}
-	};
-
-	var _getOnAddArcGISLegend = function(legendData, legendClass) {
-		return function(/*map*/) {
-			var div = L.DomUtil.create('div', legendClass);
-
-			if (!L.Browser.touch) {
-				L.DomEvent.disableClickPropagation(div);
-				L.DomEvent.on(div, 'mousewheel', L.DomEvent.stopPropagation);
+		else {
+			if (fullScreenApi.supportsFullScreen && !this.options.forcePseudoFullscreen) {
+				fullScreenApi.requestFullScreen(map._container);
 			} else {
-				L.DomEvent.on(div, 'click', L.DomEvent.stopPropagation);
+				L.DomUtil.addClass(map._container, 'leaflet-pseudo-fullscreen');
 			}
-			_updateArcGISLegend(div, legendData);
-			return div;
-		};
-	};
-
-	var _getOnAddArrayLegend = function(legend, legendClass) {
-		return function(/*map*/) {
-			var div = L.DomUtil.create('div', legendClass);
-            for (var i = 0; i < legend.colors.length; i++) {
-                div.innerHTML +=
-                    '<div class="outline"><i style="background:' + legend.colors[i] + '"></i></div>' +
-                    '<div class="info-label">' + legend.labels[i] + '</div>';
-            }
-            if (!L.Browser.touch) {
-				L.DomEvent.disableClickPropagation(div);
-				L.DomEvent.on(div, 'mousewheel', L.DomEvent.stopPropagation);
-			} else {
-				L.DomEvent.on(div, 'click', L.DomEvent.stopPropagation);
-			}
-            return div;
-		};
-	};
-
-	return {
-		getOnAddArcGISLegend: _getOnAddArcGISLegend,
-		getOnAddArrayLegend: _getOnAddArrayLegend,
-		updateArcGISLegend: _updateArcGISLegend,
-	};
+			map.invalidateSize();
+			map.fire('enterFullscreen');
+			map._isFullscreen = true;
+		}
+	},
+	
+	_handleEscKey: function () {
+		var map = this._map;
+		if (!fullScreenApi.isFullScreen(map) && !map._exitFired) {
+			map.fire('exitFullscreen');
+			map._exitFired = true;
+			map._isFullscreen = false;
+		}
+	}
 });
 
-angular.module("leaflet-directive").factory('leafletPathsHelpers', ["$rootScope", "$log", "leafletHelpers", function ($rootScope, $log, leafletHelpers) {
-    var isDefined = leafletHelpers.isDefined,
-        isArray = leafletHelpers.isArray,
-        isNumber = leafletHelpers.isNumber,
-        isValidPoint = leafletHelpers.isValidPoint;
-    var availableOptions = [
-        // Path options
-        'stroke', 'weight', 'color', 'opacity',
-        'fill', 'fillColor', 'fillOpacity',
-        'dashArray', 'lineCap', 'lineJoin', 'clickable',
-        'pointerEvents', 'className',
-
-        // Polyline options
-        'smoothFactor', 'noClip'
-    ];
-    function _convertToLeafletLatLngs(latlngs) {
-        return latlngs.filter(function(latlng) {
-            return isValidPoint(latlng);
-        }).map(function (latlng) {
-            return _convertToLeafletLatLng(latlng);
-        });
-    }
-
-    function _convertToLeafletLatLng(latlng) {
-        if (isArray(latlng)) {
-            return new L.LatLng(latlng[0], latlng[1]);
-        } else {
-            return new L.LatLng(latlng.lat, latlng.lng);
-        }
-    }
-
-    function _convertToLeafletMultiLatLngs(paths) {
-        return paths.map(function(latlngs) {
-            return _convertToLeafletLatLngs(latlngs);
-        });
-    }
-
-    function _getOptions(path, defaults) {
-        var options = {};
-        for (var i = 0; i < availableOptions.length; i++) {
-            var optionName = availableOptions[i];
-
-            if (isDefined(path[optionName])) {
-                options[optionName] = path[optionName];
-            } else if (isDefined(defaults.path[optionName])) {
-                options[optionName] = defaults.path[optionName];
-            }
-        }
-
-        return options;
-    }
-
-    var _updatePathOptions = function (path, data) {
-        var updatedStyle = {};
-        for (var i = 0; i < availableOptions.length; i++) {
-            var optionName = availableOptions[i];
-            if (isDefined(data[optionName])) {
-                updatedStyle[optionName] = data[optionName];
-            }
-        }
-        path.setStyle(data);
-    };
-
-    var _isValidPolyline = function(latlngs) {
-        if (!isArray(latlngs)) {
-            return false;
-        }
-        for (var i = 0; i < latlngs.length; i++) {
-            var point = latlngs[i];
-            if (!isValidPoint(point)) {
-                return false;
-            }
-        }
-        return true;
-    };
-
-    var pathTypes = {
-        polyline: {
-            isValid: function(pathData) {
-                var latlngs = pathData.latlngs;
-                return _isValidPolyline(latlngs);
-            },
-            createPath: function(options) {
-                return new L.Polyline([], options);
-            },
-            setPath: function(path, data) {
-                path.setLatLngs(_convertToLeafletLatLngs(data.latlngs));
-                _updatePathOptions(path, data);
-                return;
-            }
-        },
-        multiPolyline: {
-            isValid: function(pathData) {
-                var latlngs = pathData.latlngs;
-                if (!isArray(latlngs)) {
-                    return false;
-                }
-
-                for (var i in latlngs) {
-                    var polyline = latlngs[i];
-                    if (!_isValidPolyline(polyline)) {
-                        return false;
-                    }
-                }
-
-                return true;
-            },
-            createPath: function(options) {
-                return new L.multiPolyline([[[0,0],[1,1]]], options);
-            },
-            setPath: function(path, data) {
-                path.setLatLngs(_convertToLeafletMultiLatLngs(data.latlngs));
-                _updatePathOptions(path, data);
-                return;
-            }
-        } ,
-        polygon: {
-            isValid: function(pathData) {
-                var latlngs = pathData.latlngs;
-                return _isValidPolyline(latlngs);
-            },
-            createPath: function(options) {
-                return new L.Polygon([], options);
-            },
-            setPath: function(path, data) {
-                path.setLatLngs(_convertToLeafletLatLngs(data.latlngs));
-                _updatePathOptions(path, data);
-                return;
-            }
-        },
-        multiPolygon: {
-            isValid: function(pathData) {
-                var latlngs = pathData.latlngs;
-
-                if (!isArray(latlngs)) {
-                    return false;
-                }
-
-                for (var i in latlngs) {
-                    var polyline = latlngs[i];
-                    if (!_isValidPolyline(polyline)) {
-                        return false;
-                    }
-                }
-
-                return true;
-            },
-            createPath: function(options) {
-                return new L.MultiPolygon([[[0,0],[1,1],[0,1]]], options);
-            },
-            setPath: function(path, data) {
-                path.setLatLngs(_convertToLeafletMultiLatLngs(data.latlngs));
-                _updatePathOptions(path, data);
-                return;
-            }
-        },
-        rectangle: {
-            isValid: function(pathData) {
-                var latlngs = pathData.latlngs;
-
-                if (!isArray(latlngs) || latlngs.length !== 2) {
-                    return false;
-                }
-
-                for (var i in latlngs) {
-                    var point = latlngs[i];
-                    if (!isValidPoint(point)) {
-                        return false;
-                    }
-                }
-
-                return true;
-            },
-            createPath: function(options) {
-                return new L.Rectangle([[0,0],[1,1]], options);
-            },
-            setPath: function(path, data) {
-                path.setBounds(new L.LatLngBounds(_convertToLeafletLatLngs(data.latlngs)));
-                _updatePathOptions(path, data);
-            }
-        },
-        circle: {
-            isValid: function(pathData) {
-                var point= pathData.latlngs;
-                return isValidPoint(point) && isNumber(pathData.radius);
-            },
-            createPath: function(options) {
-                return new L.Circle([0,0], 1, options);
-            },
-            setPath: function(path, data) {
-                path.setLatLng(_convertToLeafletLatLng(data.latlngs));
-                if (isDefined(data.radius)) {
-                    path.setRadius(data.radius);
-                }
-                _updatePathOptions(path, data);
-            }
-        },
-        circleMarker: {
-            isValid: function(pathData) {
-                var point= pathData.latlngs;
-                return isValidPoint(point) && isNumber(pathData.radius);
-            },
-            createPath: function(options) {
-                return new L.CircleMarker([0,0], options);
-            },
-            setPath: function(path, data) {
-                path.setLatLng(_convertToLeafletLatLng(data.latlngs));
-                if (isDefined(data.radius)) {
-                    path.setRadius(data.radius);
-                }
-                _updatePathOptions(path, data);
-            }
-        }
-    };
-
-    var _getPathData = function(path) {
-        var pathData = {};
-        if (path.latlngs) {
-            pathData.latlngs = path.latlngs;
-        }
-
-        if (path.radius) {
-            pathData.radius = path.radius;
-        }
-
-        return pathData;
-    };
-
-    return {
-        setPathOptions: function(leafletPath, pathType, data) {
-            if(!isDefined(pathType)) {
-                pathType = "polyline";
-            }
-            pathTypes[pathType].setPath(leafletPath, data);
-        },
-        createPath: function(name, path, defaults) {
-            if(!isDefined(path.type)) {
-                path.type = "polyline";
-            }
-            var options = _getOptions(path, defaults);
-            var pathData = _getPathData(path);
-
-            if (!pathTypes[path.type].isValid(pathData)) {
-                $log.error("[AngularJS - Leaflet] Invalid data passed to the " + path.type + " path");
-                return;
-            }
-
-            return pathTypes[path.type].createPath(options);
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").factory('leafletBoundsHelpers', ["$log", "leafletHelpers", function ($log, leafletHelpers) {
-
-    var isArray = leafletHelpers.isArray,
-        isNumber = leafletHelpers.isNumber;
-
-    function _isValidBounds(bounds) {
-        return angular.isDefined(bounds) && angular.isDefined(bounds.southWest) &&
-               angular.isDefined(bounds.northEast) && angular.isNumber(bounds.southWest.lat) &&
-               angular.isNumber(bounds.southWest.lng) && angular.isNumber(bounds.northEast.lat) &&
-               angular.isNumber(bounds.northEast.lng);
-    }
-
-    return {
-        createLeafletBounds: function(bounds) {
-            if (_isValidBounds(bounds)) {
-                return L.latLngBounds([bounds.southWest.lat, bounds.southWest.lng],
-                                      [bounds.northEast.lat, bounds.northEast.lng ]);
-            }
-        },
-
-        isValidBounds: _isValidBounds,
-
-        createBoundsFromArray: function(boundsArray) {
-            if (!(isArray(boundsArray) && boundsArray.length === 2 &&
-                  isArray(boundsArray[0]) && isArray(boundsArray[1]) &&
-                  boundsArray[0].length === 2 && boundsArray[1].length === 2 &&
-                  isNumber(boundsArray[0][0]) && isNumber(boundsArray[0][1]) &&
-                  isNumber(boundsArray[1][0]) && isNumber(boundsArray[1][1]))) {
-                $log.error("[AngularJS - Leaflet] The bounds array is not valid.");
-                return;
-            }
-
-            return {
-                northEast: {
-                    lat: boundsArray[0][0],
-                    lng: boundsArray[0][1]
-                },
-                southWest: {
-                    lat: boundsArray[1][0],
-                    lng: boundsArray[1][1]
-                }
-            };
-
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").factory('leafletMarkersHelpers', ["$rootScope", "leafletHelpers", "$log", function ($rootScope, leafletHelpers, $log) {
-
-    var isDefined = leafletHelpers.isDefined,
-        MarkerClusterPlugin = leafletHelpers.MarkerClusterPlugin,
-        AwesomeMarkersPlugin = leafletHelpers.AwesomeMarkersPlugin,
-        MakiMarkersPlugin = leafletHelpers.MakiMarkersPlugin,
-        safeApply     = leafletHelpers.safeApply,
-        Helpers = leafletHelpers,
-        isString = leafletHelpers.isString,
-        isNumber  = leafletHelpers.isNumber,
-        isObject = leafletHelpers.isObject,
-        groups = {};
-
-    var createLeafletIcon = function(iconData) {
-        if (isDefined(iconData) && isDefined(iconData.type) && iconData.type === 'awesomeMarker') {
-            if (!AwesomeMarkersPlugin.isLoaded()) {
-                $log.error('[AngularJS - Leaflet] The AwesomeMarkers Plugin is not loaded.');
-            }
-
-            return new L.AwesomeMarkers.icon(iconData);
-        }
-
-        if (isDefined(iconData) && isDefined(iconData.type) && iconData.type === 'makiMarker') {
-            if (!MakiMarkersPlugin.isLoaded()) {
-                $log.error('[AngularJS - Leaflet] The MakiMarkers Plugin is not loaded.');
-            }
-
-            return new L.MakiMarkers.icon(iconData);
-        }
-
-        if (isDefined(iconData) && isDefined(iconData.type) && iconData.type === 'div') {
-            return new L.divIcon(iconData);
-        }
-
-        var base64icon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABkAAAApCAYAAADAk4LOAAAGmklEQVRYw7VXeUyTZxjvNnfELFuyIzOabermMZEeQC/OclkO49CpOHXOLJl/CAURuYbQi3KLgEhbrhZ1aDwmaoGqKII6odATmH/scDFbdC7LvFqOCc+e95s2VG50X/LLm/f4/Z7neY/ne18aANCmAr5E/xZf1uDOkTcGcWR6hl9247tT5U7Y6SNvWsKT63P58qbfeLJG8M5qcgTknrvvrdDbsT7Ml+tv82X6vVxJE33aRmgSyYtcWVMqX97Yv2JvW39UhRE2HuyBL+t+gK1116ly06EeWFNlAmHxlQE0OMiV6mQCScusKRlhS3QLeVJdl1+23h5dY4FNB3thrbYboqptEFlphTC1hSpJnbRvxP4NWgsE5Jyz86QNNi/5qSUTGuFk1gu54tN9wuK2wc3o+Wc13RCmsoBwEqzGcZsxsvCSy/9wJKf7UWf1mEY8JWfewc67UUoDbDjQC+FqK4QqLVMGGR9d2wurKzqBk3nqIT/9zLxRRjgZ9bqQgub+DdoeCC03Q8j+0QhFhBHR/eP3U/zCln7Uu+hihJ1+bBNffLIvmkyP0gpBZWYXhKussK6mBz5HT6M1Nqpcp+mBCPXosYQfrekGvrjewd59/GvKCE7TbK/04/ZV5QZYVWmDwH1mF3xa2Q3ra3DBC5vBT1oP7PTj4C0+CcL8c7C2CtejqhuCnuIQHaKHzvcRfZpnylFfXsYJx3pNLwhKzRAwAhEqG0SpusBHfAKkxw3w4627MPhoCH798z7s0ZnBJ/MEJbZSbXPhER2ih7p2ok/zSj2cEJDd4CAe+5WYnBCgR2uruyEw6zRoW6/DWJ/OeAP8pd/BGtzOZKpG8oke0SX6GMmRk6GFlyAc59K32OTEinILRJRchah8HQwND8N435Z9Z0FY1EqtxUg+0SO6RJ/mmXz4VuS+DpxXC3gXmZwIL7dBSH4zKE50wESf8qwVgrP1EIlTO5JP9Igu0aexdh28F1lmAEGJGfh7jE6ElyM5Rw/FDcYJjWhbeiBYoYNIpc2FT/SILivp0F1ipDWk4BIEo2VuodEJUifhbiltnNBIXPUFCMpthtAyqws/BPlEF/VbaIxErdxPphsU7rcCp8DohC+GvBIPJS/tW2jtvTmmAeuNO8BNOYQeG8G/2OzCJ3q+soYB5i6NhMaKr17FSal7GIHheuV3uSCY8qYVuEm1cOzqdWr7ku/R0BDoTT+DT+ohCM6/CCvKLKO4RI+dXPeAuaMqksaKrZ7L3FE5FIFbkIceeOZ2OcHO6wIhTkNo0ffgjRGxEqogXHYUPHfWAC/lADpwGcLRY3aeK4/oRGCKYcZXPVoeX/kelVYY8dUGf8V5EBRbgJXT5QIPhP9ePJi428JKOiEYhYXFBqou2Guh+p/mEB1/RfMw6rY7cxcjTrneI1FrDyuzUSRm9miwEJx8E/gUmqlyvHGkneiwErR21F3tNOK5Tf0yXaT+O7DgCvALTUBXdM4YhC/IawPU+2PduqMvuaR6eoxSwUk75ggqsYJ7VicsnwGIkZBSXKOUww73WGXyqP+J2/b9c+gi1YAg/xpwck3gJuucNrh5JvDPvQr0WFXf0piyt8f8/WI0hV4pRxxkQZdJDfDJNOAmM0Ag8jyT6hz0WGXWuP94Yh2jcfjmXAGvHCMslRimDHYuHuDsy2QtHuIavznhbYURq5R57KpzBBRZKPJi8eQg48h4j8SDdowifdIrEVdU+gbO6QNvRRt4ZBthUaZhUnjlYObNagV3keoeru3rU7rcuceqU1mJBxy+BWZYlNEBH+0eH4vRiB+OYybU2hnblYlTvkHinM4m54YnxSyaZYSF6R3jwgP7udKLGIX6r/lbNa9N6y5MFynjWDtrHd75ZvTYAPO/6RgF0k76mQla3FGq7dO+cH8sKn0Vo7nDllwAhqwLPkxrHwWmHJOo+AKJ4rab5OgrM7rVu8eWb2Pu0Dh4eDgXoOfvp7Y7QeqknRmvcTBEyq9m/HQQSCSz6LHq3z0yzsNySRfMS253wl2KyRDbcZPcfJKjZmSEOjcxyi+Y8dUOtsIEH6R2wNykdqrkYJ0RV92H0W58pkfQk7cKevsLK10Py8SdMGfXNXATY+pPbyJR/ET6n9nIfztNtZYRV9XniQu9IA2vOVgy4ir7GCLVmmd+zjkH0eAF9Po6K61pmCXHxU5rHMYd1ftc3owjwRSVRzLjKvqZEty6cRUD7jGqiOdu5HG6MdHjNcNYGqfDm5YRzLBBCCDl/2bk8a8gdbqcfwECu62Fg/HrggAAAABJRU5ErkJggg==";
-
-        var base64shadow = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACkAAAApCAYAAACoYAD2AAAC5ElEQVRYw+2YW4/TMBCF45S0S1luXZCABy5CgLQgwf//S4BYBLTdJLax0fFqmB07nnQfEGqkIydpVH85M+NLjPe++dcPc4Q8Qh4hj5D/AaQJx6H/4TMwB0PeBNwU7EGQAmAtsNfAzoZkgIa0ZgLMa4Aj6CxIAsjhjOCoL5z7Glg1JAOkaicgvQBXuncwJAWjksLtBTWZe04CnYRktUGdilALppZBOgHGZcBzL6OClABvMSVIzyBjazOgrvACf1ydC5mguqAVg6RhdkSWQFj2uxfaq/BrIZOLEWgZdALIDvcMcZLD8ZbLC9de4yR1sYMi4G20S4Q/PWeJYxTOZn5zJXANZHIxAd4JWhPIloTJZhzMQduM89WQ3MUVAE/RnhAXpTycqys3NZALOBbB7kFrgLesQl2h45Fcj8L1tTSohUwuxhy8H/Qg6K7gIs+3kkaigQCOcyEXCHN07wyQazhrmIulvKMQAwMcmLNqyCVyMAI+BuxSMeTk3OPikLY2J1uE+VHQk6ANrhds+tNARqBeaGc72cK550FP4WhXmFmcMGhTwAR1ifOe3EvPqIegFmF+C8gVy0OfAaWQPMR7gF1OQKqGoBjq90HPMP01BUjPOqGFksC4emE48tWQAH0YmvOgF3DST6xieJgHAWxPAHMuNhrImIdvoNOKNWIOcE+UXE0pYAnkX6uhWsgVXDxHdTfCmrEEmMB2zMFimLVOtiiajxiGWrbU52EeCdyOwPEQD8LqyPH9Ti2kgYMf4OhSKB7qYILbBv3CuVTJ11Y80oaseiMWOONc/Y7kJYe0xL2f0BaiFTxknHO5HaMGMublKwxFGzYdWsBF174H/QDknhTHmHHN39iWFnkZx8lPyM8WHfYELmlLKtgWNmFNzQcC1b47gJ4hL19i7o65dhH0Negbca8vONZoP7doIeOC9zXm8RjuL0Gf4d4OYaU5ljo3GYiqzrWQHfJxA6ALhDpVKv9qYeZA8eM3EhfPSCmpuD0AAAAASUVORK5CYII=";
-
-        if (!isDefined(iconData)) {
-            return new L.Icon.Default({
-                iconUrl: base64icon,
-                shadowUrl: base64shadow
-            });
-        }
-
-        if (!isDefined(iconData.iconUrl)) {
-            iconData.iconUrl = base64icon;
-            iconData.shadowUrl = base64shadow;
-        }
-
-        return new L.Icon(iconData);
-    };
-
-    var _resetMarkerGroup = function(groupName) {
-      if (isDefined(groups[groupName])) {
-        groups.splice(groupName, 1);
-      }
-    };
-
-    var _resetMarkerGroups = function() {
-      groups = {};
-    };
-
-    var _deleteMarker = function(marker, map, layers) {
-        marker.closePopup();
-        // There is no easy way to know if a marker is added to a layer, so we search for it
-        // if there are overlays
-        if (isDefined(layers) && isDefined(layers.overlays)) {
-            for (var key in layers.overlays) {
-                if (layers.overlays[key] instanceof L.LayerGroup || layers.overlays[key] instanceof L.FeatureGroup) {
-                    if (layers.overlays[key].hasLayer(marker)) {
-                        layers.overlays[key].removeLayer(marker);
-                        return;
-                    }
-                }
-            }
-        }
-
-        if (isDefined(groups)) {
-            for (var groupKey in groups) {
-                if (groups[groupKey].hasLayer(marker)) {
-                    groups[groupKey].removeLayer(marker);
-                }
-            }
-        }
-
-        if (map.hasLayer(marker)) {
-            map.removeLayer(marker);
-        }
-    };
-
-    return {
-        resetMarkerGroup: _resetMarkerGroup,
-
-        resetMarkerGroups: _resetMarkerGroups,
-
-        deleteMarker: _deleteMarker,
-
-        createMarker: function(markerData) {
-            if (!isDefined(markerData)) {
-                $log.error('[AngularJS - Leaflet] The marker definition is not valid.');
-                return;
-            }
-
-            var markerOptions = {
-                icon: createLeafletIcon(markerData.icon),
-                title: isDefined(markerData.title) ? markerData.title : '',
-                draggable: isDefined(markerData.draggable) ? markerData.draggable : false,
-                clickable: isDefined(markerData.clickable) ? markerData.clickable : true,
-                riseOnHover: isDefined(markerData.riseOnHover) ? markerData.riseOnHover : false,
-                zIndexOffset: isDefined(markerData.zIndexOffset) ? markerData.zIndexOffset : 0,
-                iconAngle: isDefined(markerData.iconAngle) ? markerData.iconAngle : 0
-            };
-            // Add any other options not added above to markerOptions
-            for (var markerDatum in markerData) {
-                if (markerData.hasOwnProperty(markerDatum) && !markerOptions.hasOwnProperty(markerDatum)) {
-                    markerOptions[markerDatum] = markerData[markerDatum];
-                }
-            }
-
-            var marker = new L.marker(markerData, markerOptions);
-
-            if (!isString(markerData.message)) {
-                marker.unbindPopup();
-            }
-
-            return marker;
-        },
-
-        addMarkerToGroup: function(marker, groupName, groupOptions, map) {
-            if (!isString(groupName)) {
-                $log.error('[AngularJS - Leaflet] The marker group you have specified is invalid.');
-                return;
-            }
-
-            if (!MarkerClusterPlugin.isLoaded()) {
-                $log.error("[AngularJS - Leaflet] The MarkerCluster plugin is not loaded.");
-                return;
-            }
-            if (!isDefined(groups[groupName])) {
-                groups[groupName] = new L.MarkerClusterGroup(groupOptions);
-                map.addLayer(groups[groupName]);
-            }
-            groups[groupName].addLayer(marker);
-        },
-
-        listenMarkerEvents: function(marker, markerData, leafletScope) {
-            marker.on("popupopen", function(/* event */) {
-                safeApply(leafletScope, function() {
-                    markerData.focus = true;
-                });
-            });
-            marker.on("popupclose", function(/* event */) {
-                safeApply(leafletScope, function() {
-                    markerData.focus = false;
-                });
-            });
-        },
-
-        addMarkerWatcher: function(marker, name, leafletScope, layers, map) {
-            var clearWatch = leafletScope.$watch("markers[\""+name+"\"]", function(markerData, oldMarkerData) {
-                if (!isDefined(markerData)) {
-                    _deleteMarker(marker, map, layers);
-                    clearWatch();
-                    return;
-                }
-
-                if (!isDefined(oldMarkerData)) {
-                    return;
-                }
-
-                // Update the lat-lng property (always present in marker properties)
-                if (!(isNumber(markerData.lat) && isNumber(markerData.lng))) {
-                    $log.warn('There are problems with lat-lng data, please verify your marker model');
-                    _deleteMarker(marker, map, layers);
-                    return;
-                }
-
-                // It is possible that the layer has been removed or the layer marker does not exist
-                // Update the layer group if present or move it to the map if not
-                if (!isString(markerData.layer)) {
-                    // There is no layer information, we move the marker to the map if it was in a layer group
-                    if (isString(oldMarkerData.layer)) {
-                        // Remove from the layer group that is supposed to be
-                        if (isDefined(layers.overlays[oldMarkerData.layer]) && layers.overlays[oldMarkerData.layer].hasLayer(marker)) {
-                            layers.overlays[oldMarkerData.layer].removeLayer(marker);
-                            marker.closePopup();
-                        }
-                        // Test if it is not on the map and add it
-                        if (!map.hasLayer(marker)) {
-                            map.addLayer(marker);
-                        }
-                    }
-                }
-
-                if (isString(markerData.layer) && oldMarkerData.layer !== markerData.layer) {
-                    // If it was on a layer group we have to remove it
-                    if (isString(oldMarkerData.layer) && isDefined(layers.overlays[oldMarkerData.layer]) && layers.overlays[oldMarkerData.layer].hasLayer(marker)) {
-                        layers.overlays[oldMarkerData.layer].removeLayer(marker);
-                    }
-                    marker.closePopup();
-
-                    // Remove it from the map in case the new layer is hidden or there is an error in the new layer
-                    if (map.hasLayer(marker)) {
-                        map.removeLayer(marker);
-                    }
-
-                    // The markerData.layer is defined so we add the marker to the layer if it is different from the old data
-                    if (!isDefined(layers.overlays[markerData.layer])) {
-                        $log.error('[AngularJS - Leaflet] You must use a name of an existing layer');
-                        return;
-                    }
-                    // Is a group layer?
-                    var layerGroup = layers.overlays[markerData.layer];
-                    if (!(layerGroup instanceof L.LayerGroup || layerGroup instanceof L.FeatureGroup)) {
-                        $log.error('[AngularJS - Leaflet] A marker can only be added to a layer of type "group" or "featureGroup"');
-                        return;
-                    }
-                    // The marker goes to a correct layer group, so first of all we add it
-                    layerGroup.addLayer(marker);
-                    // The marker is automatically added to the map depending on the visibility
-                    // of the layer, so we only have to open the popup if the marker is in the map
-                    if (map.hasLayer(marker) && markerData.focus === true) {
-                        marker.openPopup();
-                    }
-                }
-
-                // Update the draggable property
-                if (markerData.draggable !== true && oldMarkerData.draggable === true && (isDefined(marker.dragging))) {
-                    marker.dragging.disable();
-                }
-
-                if (markerData.draggable === true && oldMarkerData.draggable !== true) {
-                    // The markerData.draggable property must be true so we update if there wasn't a previous value or it wasn't true
-                    if (marker.dragging) {
-                        marker.dragging.enable();
-                    } else {
-                        if (L.Handler.MarkerDrag) {
-                            marker.dragging = new L.Handler.MarkerDrag(marker);
-                            marker.options.draggable = true;
-                            marker.dragging.enable();
-                        }
-                    }
-                }
-
-                // Update the icon property
-                if (!isObject(markerData.icon)) {
-                    // If there is no icon property or it's not an object
-                    if (isObject(oldMarkerData.icon)) {
-                        // If there was an icon before restore to the default
-                        marker.setIcon(createLeafletIcon());
-                        marker.closePopup();
-                        marker.unbindPopup();
-                        if (isString(markerData.message)) {
-                            marker.bindPopup(markerData.message, markerData.popupOptions);
-                        }
-                    }
-                }
-
-                if (isObject(markerData.icon) && isObject(oldMarkerData.icon) && !angular.equals(markerData.icon, oldMarkerData.icon)) {
-                    var dragG = false;
-                    if (marker.dragging) {
-                        dragG = marker.dragging.enabled();
-                    }
-                    marker.setIcon(createLeafletIcon(markerData.icon));
-                    if (dragG) {
-                        marker.dragging.enable();
-                    }
-                    marker.closePopup();
-                    marker.unbindPopup();
-                    if (isString(markerData.message)) {
-                        marker.bindPopup(markerData.message, markerData.popupOptions);
-                    }
-                }
-
-                // Update the Popup message property
-                if (!isString(markerData.message) && isString(oldMarkerData.message)) {
-                    marker.closePopup();
-                    marker.unbindPopup();
-                }
-
-                // Update the label content
-                if (Helpers.LabelPlugin.isLoaded() && isDefined(markerData.label) && isDefined(markerData.label.message) && !angular.equals(markerData.label.message, oldMarkerData.label.message)) {
-                    marker.updateLabelContent(markerData.label.message);
-                }
-
-                // There is some text in the popup, so we must show the text or update existing
-                if (isString(markerData.message) && !isString(oldMarkerData.message)) {
-                    // There was no message before so we create it
-                    marker.bindPopup(markerData.message, markerData.popupOptions);
-                    if (markerData.focus === true) {
-                        // If the focus is set, we must open the popup, because we do not know if it was opened before
-                        marker.openPopup();
-                    }
-                }
-
-                if (isString(markerData.message) && isString(oldMarkerData.message) && markerData.message !== oldMarkerData.message) {
-                    // There was a different previous message so we update it
-                    marker.setPopupContent(markerData.message);
-                }
-
-                // Update the focus property
-                var updatedFocus = false;
-                if (markerData.focus !== true && oldMarkerData.focus === true) {
-                    // If there was a focus property and was true we turn it off
-                    marker.closePopup();
-                    updatedFocus = true;
-                }
-
-                // The markerData.focus property must be true so we update if there wasn't a previous value or it wasn't true
-                if (markerData.focus === true && oldMarkerData.focus !== true) {
-                    marker.openPopup();
-                    updatedFocus = true;
-                }
-
-                if(oldMarkerData.focus === true && markerData.focus === true){
-                    // Reopen the popup when focus is still true
-                    marker.openPopup();
-                    updatedFocus = true;
-                }
-
-                // zIndexOffset adjustment
-                if (oldMarkerData.zIndexOffset !== markerData.zIndexOffset) {
-                    marker.setZIndexOffset(markerData.zIndexOffset);
-                }
-
-                var markerLatLng = marker.getLatLng();
-                var isCluster = (isString(markerData.layer) && Helpers.MarkerClusterPlugin.is(layers.overlays[markerData.layer]));
-                // If the marker is in a cluster it has to be removed and added to the layer when the location is changed
-                if (isCluster) {
-                    // The focus has changed even by a user click or programatically
-                    if (updatedFocus) {
-                        // We only have to update the location if it was changed programatically, because it was
-                        // changed by a user drag the marker data has already been updated by the internal event
-                        // listened by the directive
-                        if ((markerData.lat !== oldMarkerData.lat) || (markerData.lng !== oldMarkerData.lng)) {
-                            layers.overlays[markerData.layer].removeLayer(marker);
-                            marker.setLatLng([markerData.lat, markerData.lng]);
-                            layers.overlays[markerData.layer].addLayer(marker);
-                        }
-                    } else {
-                        // The marker has possibly moved. It can be moved by a user drag (marker location and data are equal but old
-                        // data is diferent) or programatically (marker location and data are diferent)
-                        if ((markerLatLng.lat !== markerData.lat) || (markerLatLng.lng !== markerData.lng)) {
-                            // The marker was moved by a user drag
-                            layers.overlays[markerData.layer].removeLayer(marker);
-                            marker.setLatLng([markerData.lat, markerData.lng]);
-                            layers.overlays[markerData.layer].addLayer(marker);
-                        } else if ((markerData.lat !== oldMarkerData.lat) || (markerData.lng !== oldMarkerData.lng)) {
-                            // The marker was moved programatically
-                            layers.overlays[markerData.layer].removeLayer(marker);
-                            marker.setLatLng([markerData.lat, markerData.lng]);
-                            layers.overlays[markerData.layer].addLayer(marker);
-                        } else if (isObject(markerData.icon) && isObject(oldMarkerData.icon) && !angular.equals(markerData.icon, oldMarkerData.icon)) {
-                            layers.overlays[markerData.layer].removeLayer(marker);
-                            layers.overlays[markerData.layer].addLayer(marker);
-                        }
-                    }
-                } else if (markerLatLng.lat !== markerData.lat || markerLatLng.lng !== markerData.lng) {
-                    marker.setLatLng([markerData.lat, markerData.lng]);
-                }
-            }, true);
-        }
-    };
-}]);
-
-angular.module("leaflet-directive").factory('leafletHelpers', ["$q", "$log", function ($q, $log) {
-
-    function _obtainEffectiveMapId(d, mapId) {
-        var id, i;
-        if (!angular.isDefined(mapId)) {
-        if (Object.keys(d).length === 0) {
-            id = "main";
-        } else if (Object.keys(d).length >= 1) {
-            for (i in d) {
-                if (d.hasOwnProperty(i)) {
-                    id = i;
-                }
-            }
-        } else if (Object.keys(d).length === 0) {
-            id = "main";
-        } else {
-                $log.error("[AngularJS - Leaflet] - You have more than 1 map on the DOM, you must provide the map ID to the leafletData.getXXX call");
-            }
-        } else {
-            id = mapId;
-        }
-
-        return id;
-    }
-
-    function _getUnresolvedDefer(d, mapId) {
-        var id = _obtainEffectiveMapId(d, mapId),
-            defer;
-
-        if (!angular.isDefined(d[id]) || d[id].resolvedDefer === true) {
-            defer = $q.defer();
-            d[id] = {
-                defer: defer,
-                resolvedDefer: false
-            };
-        } else {
-            defer = d[id].defer;
-        }
-
-        return defer;
-    }
-
-    return {
-        //Determine if a reference is {}
-        isEmpty: function(value) {
-            return Object.keys(value).length === 0;
-        },
-
-        //Determine if a reference is undefined or {}
-        isUndefinedOrEmpty: function (value) {
-            return (angular.isUndefined(value) || value === null) || Object.keys(value).length === 0;
-        },
-
-        // Determine if a reference is defined
-        isDefined: function(value) {
-            return angular.isDefined(value) && value !== null;
-        },
-
-        // Determine if a reference is a number
-        isNumber: function(value) {
-            return angular.isNumber(value);
-        },
-
-        // Determine if a reference is a string
-        isString: function(value) {
-            return angular.isString(value);
-        },
-
-        // Determine if a reference is an array
-        isArray: function(value) {
-            return angular.isArray(value);
-        },
-
-        // Determine if a reference is an object
-        isObject: function(value) {
-            return angular.isObject(value);
-        },
-
-		// Determine if a reference is a function.
-		isFunction: function(value) {
-			return angular.isFunction(value);
+L.Map.addInitHook(function () {
+	if (this.options.fullscreenControl) {
+		this.fullscreenControl = L.control.fullscreen(this.options.fullscreenControlOptions);
+		this.addControl(this.fullscreenControl);
+	}
+});
+
+L.control.fullscreen = function (options) {
+	return new L.Control.FullScreen(options);
+};
+
+/* 
+Native FullScreen JavaScript API
+-------------
+Assumes Mozilla naming conventions instead of W3C for now
+
+source : http://johndyer.name/native-fullscreen-javascript-api-plus-jquery-plugin/
+
+*/
+
+	var 
+		fullScreenApi = { 
+			supportsFullScreen: false,
+			isFullScreen: function() { return false; }, 
+			requestFullScreen: function() {}, 
+			cancelFullScreen: function() {},
+			fullScreenEventName: '',
+			prefix: ''
 		},
-
-        // Determine if two objects have the same properties
-        equals: function(o1, o2) {
-            return angular.equals(o1, o2);
-        },
-
-        isValidCenter: function(center) {
-            return angular.isDefined(center) && angular.isNumber(center.lat) &&
-                   angular.isNumber(center.lng) && angular.isNumber(center.zoom);
-        },
-
-        isValidPoint: function(point) {
-            if (!angular.isDefined(point)) {
-                return false;
-            }
-            if (angular.isArray(point)) {
-                return point.length === 2 && angular.isNumber(point[0]) && angular.isNumber(point[1]);
-            }
-            return angular.isNumber(point.lat) && angular.isNumber(point.lng);
-        },
-
-        isSameCenterOnMap: function(centerModel, map) {
-            var mapCenter = map.getCenter();
-            var zoom = map.getZoom();
-            if (centerModel.lat && centerModel.lng &&
-                mapCenter.lat.toFixed(4) === centerModel.lat.toFixed(4) &&
-                mapCenter.lng.toFixed(4) === centerModel.lng.toFixed(4) &&
-                zoom === centerModel.zoom) {
-                    return true;
-            }
-            return false;
-        },
-
-        safeApply: function($scope, fn) {
-            var phase = $scope.$root.$$phase;
-            if (phase === '$apply' || phase === '$digest') {
-                $scope.$eval(fn);
-            } else {
-                $scope.$apply(fn);
-            }
-        },
-
-        obtainEffectiveMapId: _obtainEffectiveMapId,
-
-        getDefer: function(d, mapId) {
-            var id = _obtainEffectiveMapId(d, mapId),
-                defer;
-            if (!angular.isDefined(d[id]) || d[id].resolvedDefer === false) {
-                defer = _getUnresolvedDefer(d, mapId);
-            } else {
-                defer = d[id].defer;
-            }
-            return defer;
-        },
-
-        getUnresolvedDefer: _getUnresolvedDefer,
-
-        setResolvedDefer: function(d, mapId) {
-            var id = _obtainEffectiveMapId(d, mapId);
-            d[id].resolvedDefer = true;
-        },
-
-        AwesomeMarkersPlugin: {
-            isLoaded: function() {
-                if (angular.isDefined(L.AwesomeMarkers) && angular.isDefined(L.AwesomeMarkers.Icon)) {
-                    return true;
-                } else {
-                    return false;
-                }
-            },
-            is: function(icon) {
-                if (this.isLoaded()) {
-                    return icon instanceof L.AwesomeMarkers.Icon;
-                } else {
-                    return false;
-                }
-            },
-            equal: function (iconA, iconB) {
-                if (!this.isLoaded()) {
-                    return false;
-                }
-                if (this.is(iconA)) {
-                    return angular.equals(iconA, iconB);
-                } else {
-                    return false;
-                }
-            }
-        },
-
-        PolylineDecoratorPlugin: {
-            isLoaded: function() {
-                if (angular.isDefined(L.PolylineDecorator)) {
-                    return true;
-                } else {
-                    return false;
-                }
-            },
-            is: function(decoration) {
-                if (this.isLoaded()) {
-                    return decoration instanceof L.PolylineDecorator;
-                } else {
-                    return false;
-                }
-            },
-            equal: function(decorationA, decorationB) {
-                if (!this.isLoaded()) {
-                    return false;
-                }
-                if (this.is(decorationA)) {
-                    return angular.equals(decorationA, decorationB);
-                } else {
-                    return false;
-                }
-            }
-        },
-
-        MakiMarkersPlugin: {
-            isLoaded: function() {
-                if (angular.isDefined(L.MakiMarkers) && angular.isDefined(L.MakiMarkers.Icon)) {
-                    return true;
-                } else {
-                    return false;
-                }
-            },
-            is: function(icon) {
-                if (this.isLoaded()) {
-                    return icon instanceof L.MakiMarkers.Icon;
-                } else {
-                    return false;
-                }
-            },
-            equal: function (iconA, iconB) {
-                if (!this.isLoaded()) {
-                    return false;
-                }
-                if (this.is(iconA)) {
-                    return angular.equals(iconA, iconB);
-                } else {
-                    return false;
-                }
-            }
-        },
-        LabelPlugin: {
-            isLoaded: function() {
-                return angular.isDefined(L.Label);
-            },
-            is: function(layer) {
-                if (this.isLoaded()) {
-                    return layer instanceof L.MarkerClusterGroup;
-                } else {
-                    return false;
-                }
-            }
-        },
-        MarkerClusterPlugin: {
-            isLoaded: function() {
-                return angular.isDefined(L.MarkerClusterGroup);
-            },
-            is: function(layer) {
-                if (this.isLoaded()) {
-                    return layer instanceof L.MarkerClusterGroup;
-                } else {
-                    return false;
-                }
-            }
-        },
-        GoogleLayerPlugin: {
-            isLoaded: function() {
-                return angular.isDefined(L.Google);
-            },
-            is: function(layer) {
-                if (this.isLoaded()) {
-                    return layer instanceof L.Google;
-                } else {
-                    return false;
-                }
-            }
-        },
-        ChinaLayerPlugin: {
-            isLoaded: function() {
-                return angular.isDefined(L.tileLayer.chinaProvider);
-            }
-        },
-        HeatMapLayerPlugin: {
-            isLoaded: function() {
-                return angular.isDefined(L.TileLayer.WebGLHeatMap);
-            }
-        },
-        BingLayerPlugin: {
-            isLoaded: function() {
-                return angular.isDefined(L.BingLayer);
-            },
-            is: function(layer) {
-                if (this.isLoaded()) {
-                    return layer instanceof L.BingLayer;
-                } else {
-                    return false;
-                }
-            }
-        },
-        WFSLayerPlugin: {
-            isLoaded: function() {
-                return L.GeoJSON.WFS !== undefined;
-            },
-            is: function(layer) {
-                if (this.isLoaded()) {
-                    return layer instanceof L.GeoJSON.WFS;
-                } else {
-                    return false;
-                }
-            }
-        },
-        AGSLayerPlugin: {
-            isLoaded: function() {
-                return lvector !== undefined && lvector.AGS !== undefined;
-            },
-            is: function(layer) {
-                if (this.isLoaded()) {
-                    return layer instanceof lvector.AGS;
-                } else {
-                    return false;
-                }
-            }
-        },
-        YandexLayerPlugin: {
-            isLoaded: function() {
-                return angular.isDefined(L.Yandex);
-            },
-            is: function(layer) {
-                if (this.isLoaded()) {
-                    return layer instanceof L.Yandex;
-                } else {
-                    return false;
-                }
-            }
-        },
-		DynamicMapLayerPlugin: {
-			isLoaded: function() {
-				return L.esri !== undefined && L.esri.dynamicMapLayer !== undefined;
-			},
-			is: function(layer) {
-				if (this.isLoaded()) {
-					return layer instanceof L.esri.dynamicMapLayer;
-				} else {
-					return false;
-				}
+		browserPrefixes = 'webkit moz o ms khtml'.split(' ');
+	
+	// check for native support
+	if (typeof document.exitFullscreen !== 'undefined') {
+		fullScreenApi.supportsFullScreen = true;
+	} else {
+		// check for fullscreen support by vendor prefix
+		for (var i = 0, il = browserPrefixes.length; i < il; i++ ) {
+			fullScreenApi.prefix = browserPrefixes[i];
+			if (typeof document[fullScreenApi.prefix + 'CancelFullScreen' ] !== 'undefined' ) {
+				fullScreenApi.supportsFullScreen = true;
+				break;
 			}
-        },
-        GeoJSONPlugin: {
-            isLoaded: function(){
-                return angular.isDefined(L.TileLayer.GeoJSON);
-            },
-            is: function(layer) {
-                if (this.isLoaded()) {
-                    return layer instanceof L.TileLayer.GeoJSON;
-                } else {
-                    return false;
-                }
-            }
-        },
-		UTFGridPlugin: {
-            isLoaded: function(){
-                return angular.isDefined(L.UtfGrid);
-            },
-            is: function(layer) {
-                if (this.isLoaded()) {
-                    return layer instanceof L.UtfGrid;
-                } else {
-                    $log.error('[AngularJS - Leaflet] No UtfGrid plugin found.');
-                    return false;
-                }
-            }
-        },
-        CartoDB: {
-            isLoaded: function(){
-                return cartodb;
-            },
-            is: function(/*layer*/) {
-                return true;
-                /*
-                if (this.isLoaded()) {
-                    return layer instanceof L.TileLayer.GeoJSON;
-                } else {
-                    return false;
-                }*/
-            }
-        },
-        Leaflet: {
-            DivIcon: {
-                is: function(icon) {
-                    return icon instanceof L.DivIcon;
-                },
-                equal: function(iconA, iconB) {
-                    if (this.is(iconA)) {
-                        return angular.equals(iconA, iconB);
-                    } else {
-                        return false;
-                    }
-                }
-            },
-            Icon: {
-                is: function(icon) {
-                    return icon instanceof L.Icon;
-                },
-                equal: function(iconA, iconB) {
-                    if (this.is(iconA)) {
-                        return angular.equals(iconA, iconB);
-                    } else {
-                        return false;
-                    }
-                }
-            }
-        }
-    };
-}]);
+		}
+	}
+	
+	// update methods to do something useful
+	if (fullScreenApi.supportsFullScreen) {
+		fullScreenApi.fullScreenEventName = fullScreenApi.prefix + 'fullscreenchange';
+		fullScreenApi.isFullScreen = function() {
+			switch (this.prefix) {	
+				case '':
+					return document.fullScreen;
+				case 'webkit':
+					return document.webkitIsFullScreen;
+				default:
+					return document[this.prefix + 'FullScreen'];
+			}
+		};
+		fullScreenApi.requestFullScreen = function(el) {
+			return (this.prefix === '') ? el.requestFullscreen() : el[this.prefix + 'RequestFullScreen']();
+		};
+		fullScreenApi.cancelFullScreen = function(el) {
+			return (this.prefix === '') ? document.exitFullscreen() : document[this.prefix + 'CancelFullScreen']();
+		};
+	}
 
-}());;/**
+	// jQuery plugin
+	if (typeof jQuery !== 'undefined') {
+		jQuery.fn.requestFullScreen = function() {
+			return this.each(function() {
+				var el = jQuery(this);
+				if (fullScreenApi.supportsFullScreen) {
+					fullScreenApi.requestFullScreen(el);
+				}
+			});
+		};
+	}
+
+	// export api
+	window.fullScreenApi = fullScreenApi;
+})();
+;/**
  * marked - a markdown parser
  * Copyright (c) 2011-2014, Christopher Jeffrey. (MIT Licensed)
  * https://github.com/chjj/marked
@@ -3929,7 +5085,7 @@ var block = {
   lheading: /^([^\n]+)\n *(=|-){2,} *(?:\n+|$)/,
   blockquote: /^( *>[^\n]+(\n(?!def)[^\n]+)*\n*)+/,
   list: /^( *)(bull) [\s\S]+?(?:hr|def|\n{2,}(?! )(?!\1bull )\n*|\s*$)/,
-  html: /^ *(?:comment|closed|closing) *(?:\n{2,}|\s*$)/,
+  html: /^ *(?:comment *(?:\n|\s*$)|closed *(?:\n{2,}|\s*$)|closing *(?:\n{2,}|\s*$))/,
   def: /^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +["(]([^\n]+)[")])? *(?:\n+|$)/,
   table: noop,
   paragraph: /^((?:[^\n]+\n?(?!hr|heading|lheading|blockquote|tag|def))+)\n*/,
@@ -4777,7 +5933,7 @@ Renderer.prototype.link = function(href, title, text) {
     } catch (e) {
       return '';
     }
-    if (prot.indexOf('javascript:') === 0) {
+    if (prot.indexOf('javascript:') === 0 || prot.indexOf('vbscript:') === 0) {
       return '';
     }
   }
@@ -5063,8 +6219,13 @@ function marked(src, opt, callback) {
 
     pending = tokens.length;
 
-    var done = function() {
-      var out, err;
+    var done = function(err) {
+      if (err) {
+        opt.highlight = highlight;
+        return callback(err);
+      }
+
+      var out;
 
       try {
         out = Parser.parse(tokens, opt);
@@ -5093,6 +6254,7 @@ function marked(src, opt, callback) {
           return --pending || done();
         }
         return highlight(token.text, token.lang, function(err, code) {
+          if (err) return done(err);
           if (code == null || code === token.text) {
             return --pending || done();
           }
@@ -5162,7 +6324,7 @@ marked.inlineLexer = InlineLexer.output;
 
 marked.parse = marked;
 
-if (typeof exports === 'object') {
+if (typeof module !== 'undefined' && typeof exports === 'object') {
   module.exports = marked;
 } else if (typeof define === 'function' && define.amd) {
   define(function() { return marked; });
@@ -5236,22 +6398,114 @@ if (typeof exports === 'object') {
     };
   }]);
 
-}());;angular.module( 'ckanApi', [] )
+}());;angular.module( 'esri-geocoder', [] )
+
+// ESRI geocoder API
+// https://developers.arcgis.com/rest/geocode/api-reference/overview-world-geocoding-service.htm
+.factory( 'geocoder', [ '$http', '$q',
+function(                $http ,  $q ) {
+
+	return ({
+		// https://developers.arcgis.com/rest/geocode/api-reference/geocoding-find-address-candidates.htm
+		'findAddressCandidates': function findAddressCandidates( params ) {
+			angular.extend( params, {
+				forStorage: false,
+				f: 'json'
+			});
+
+			var defer = $q.defer();
+
+			$http.get( '//geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates', {
+				params: params,
+				cache: true
+			})
+			.success(function( data ) {
+				defer.resolve( data );
+			})
+			.error(function( data, status ) {
+				defer.reject( status );
+			});
+
+			return defer.promise;
+		}
+	});
+}])
+;
+;/*global $*/
+angular.module( 'ckanApi', [] )
 
 
-// generic request
-.factory( 'sqlRequest', [ '$http', '$q',
-function(                  $http,   $q ) {
+// SQL request
+// http://docs.ckan.org/en/latest/maintaining/datastore.html#ckanext.datastore.logic.action.datastore_search_sql
+.factory( 'datastoreSearchSQL', [ '$interpolate', '$http', '$q',
+function(                          $interpolate ,  $http,   $q ) {
 
-	return function( dataset ) {
-		var params = params || {};
+	return function( args ) {
+		var params = {};
 		var defer = $q.defer();
+		var select = [ '*' ];
+		var from = [];
+		var where = [];
+		var order = [];
+		var distance;
+
+		// dataset UUID format check
+		// http://stackoverflow.com/questions/19989481/how-to-determine-if-a-string-is-a-valid-v4-uuid
+		if ( /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89AB][0-9a-f]{3}-[0-9a-f]{12}$/i.test( args.resourceId )) {
+			from.push( '"' + args.resourceId + '"' );
+		} else {
+			defer.reject( 'Invalid resource ID: ' + args.resourceId );
+			return defer.promise;
+		}
+
+		// hardcode data.qld.gov.au (production) unless staging is specified
+		if ( args.ckanServer !== 'staging.data.qld.gov.au' ) {
+			args.ckanServer = 'data.qld.gov.au';
+		}
+
+		// full text searching
+		if ( args.fullText ) {
+			from.push( 'plainto_tsquery( \'english\', \'' + args.fullText + '\' ) query' );
+			where.push( '_full_text @@ query' );
+		}
+
+		// geo searching
+		if ( args.latitude && args.longitude ) {
+			distance = $interpolate( '(3959*acos(cos(radians({{ latitude }}))*cos(radians("Latitude"))*cos(radians("Longitude")-radians({{ longitude }}))+sin(radians({{ latitude }}))*sin(radians("Latitude"))))' )( args );
+			select.push( distance + ' AS "Distance"' );
+			where.push( distance + ' <= ' + args.distance );
+			order.push( '"Distance"' );
+		}
+
+		// filtering by column values
+		if ( args.filter ) {
+			var filter = $.map( args.filter, function( value, key ) {
+				return value === '' ? null : $interpolate( 'upper("{{ key }}") LIKE upper(\'%{{ value }}%\')' )({
+					key: key,
+					value: value
+				});
+			});
+			if ( filter.length ) {
+				where = where.concat( filter );
+			}
+		}
+
+		// where clause
+		if ( where.length === 0 ) {
+			where = [ '1=1' ];
+		}
 
 		angular.extend( params, {
-			sql: 'SELECT * FROM "' + dataset + '" WHERE 1=1'
+			sql: $interpolate( 'SELECT {{ select }} FROM {{ from }} WHERE {{ where }}{{order}}' )({
+				select: select.join( ',' ),
+				from: from.join( ',' ),
+				where: where.join( ' AND ' ),
+				order: order.length ? ' ORDER BY ' + order.join( ',' ) : ''
+			}),
+			callback: 'JSON_CALLBACK'
 		});
 
-		$http.get( 'https://data.qld.gov.au/api/action/datastore_search_sql', {
+		$http.jsonp( 'https://' + args.ckanServer + '/api/action/datastore_search_sql', {
 			params: params,
 			cache: true
 		})
@@ -5268,36 +6522,114 @@ function(                  $http,   $q ) {
 
 
 // CKAN API
-.factory( 'ckan', [ 'sqlRequest',
-function(            sqlRequest ) {
+.factory( 'ckan', [ 'datastoreSearchSQL',
+function(            datastoreSearchSQL ) {
 
 	return ({
-		'sqlRequest': sqlRequest
+		'datastoreSearchSQL': datastoreSearchSQL
 	});
 }])
 ;;/*global $*/
-angular.module( 'mam.searchView', [] )
+angular.module( 'mam.searchView', [ 'esri-geocoder', 'qgovMam.config' ])
 
-.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'mapModel', 'pageNumber', 'json',
-function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapModel,   pageNumber,   json ) {
+
+.config([ '$stateProvider',
+function(  $stateProvider ) {
+	// search results
+	$stateProvider.state( 'mam.search', {
+		url: '?query&location&distance&page&title', // need &title to trigger route changes in history
+		controller: 'SearchController',
+		controllerAs: 'vm',
+		templateUrl: 'search.html',
+		resolve: {
+			pageNumber: [ '$stateParams', function( $stateParams ) {
+				return parseInt( $stateParams.page, 10 ) || 1;
+			}],
+			results: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
+			function(    geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
+				var search = $location.search();
+				var ckanResponse, geocodeResponse;
+
+				// reserved search params: fulltext, location, distance
+				var filter = angular.copy( search );
+				// remove stateParams from custom filters
+				$.each( $stateParams, function( key ) {
+					delete filter[ key ];
+				});
+
+				// geo search
+				if ( search.location ) {
+					geocodeResponse = geocoder.findAddressCandidates({
+						singleLine: $stateParams.location,
+						countryCode: 'AU',
+						maxLocations: 1
+					});
+
+					ckanResponse = geocodeResponse.then(function( geoResponse ) {
+						return ckan.datastoreSearchSQL({
+							ckanServer: SOURCE.server,
+							resourceId: SOURCE.resourceId,
+							fullText: $stateParams.query,
+							latitude: geoResponse.candidates[ 0 ].location.y,
+							longitude: geoResponse.candidates[ 0 ].location.x,
+							distance: $stateParams.distance || DEFAULT_GEO_RADIUS,
+							filter: filter
+						});
+					});
+
+					return $q.all([ geocodeResponse, ckanResponse ]).then(function( results ) {
+						return {
+							geocode: results[ 0 ],
+							search: results[ 1 ],
+						};
+					});
+				}
+
+				ckanResponse = ckan.datastoreSearchSQL({
+					ckanServer: SOURCE.server,
+					resourceId: SOURCE.resourceId,
+					fullText: $stateParams.query,
+					filter: filter
+				});
+				return $q.all([ ckanResponse ]).then(function( results ) {
+					return {
+						search: results[ 0 ]
+					};
+				});
+			}]
+		}
+	});
+}])
+
+
+.controller( 'SearchController', [ 'RESULTS_PER_PAGE', 'PAGES_AVAILABLE', 'qgovMapModel', '$location', '$state', '$stateParams', 'pageNumber', 'results',
+function(                           RESULTS_PER_PAGE ,  PAGES_AVAILABLE ,  qgovMapModel ,  $location ,  $state ,  $stateParams ,  pageNumber ,  results ) {
 
 	// view model
 	var vm = this;
 
-	var total = json.result.records.length;
+	var total = results.search.result.records.length;
 	var firstResultOnPage = ( pageNumber - 1 ) * RESULTS_PER_PAGE + 1;
 
-	vm.searchResults = json.result.records.slice( firstResultOnPage - 1, firstResultOnPage + RESULTS_PER_PAGE );
+	vm.searchResults = results.search.result.records.slice( firstResultOnPage - 1, firstResultOnPage + RESULTS_PER_PAGE );
 
-	mapModel.setMarkers(
-		$.map( json.result.records, function( record ) {
-			return {
-				title: record.Title,
-				lat: parseFloat( record.Latitude ),
-				lng: parseFloat( record.Longitude )
-			};
+	qgovMapModel.setMarkers(
+		$.map( results.search.result.records, function( record ) {
+			return record.Latitude && record.Longitude ? {
+				latlng: [ parseFloat( record.Latitude ), parseFloat( record.Longitude ) ],
+				options: { title: record.Title || record.Name }
+			} : null;
 		})
 	);
+
+	if ( results.geocode ) {
+		qgovMapModel.setView({
+			lat: results.geocode.candidates[ 0 ].location.y,
+			lng: results.geocode.candidates[ 0 ].location.x
+		}, 7.5, 2 );
+	} else {
+		qgovMapModel.setView();
+	}
 
 	// result set description
 	// http://www.qld.gov.au/web/cue/module5/checkpoints/checkpoint09/
@@ -5316,46 +6648,124 @@ function(                           RESULTS_PER_PAGE,   PAGES_AVAILABLE,   mapMo
 	// http://www.qld.gov.au/web/cue/module5/checkpoints/checkpoint15/
 	vm.pagination = {
 		current: pageNumber,
+		limit: RESULTS_PER_PAGE,
 		previous: pageNumber > 1 ? pageNumber - 1 : null,
 		next: pageNumber < lastPage ? pageNumber + 1 : null,
-		limit: RESULTS_PER_PAGE,
-		pages: []
+		pages: [],
+		pageUrl: function( n ) {
+			// merge state, query string (custom params) and new page number
+			var query = angular.extend( {}, $stateParams, $location.search(), { page: n } );
+			// remove undefined values
+			query = $.each( query, function( key, value ) {
+				if ( ! angular.isDefined( value )) {
+					delete query[ key ];
+				}
+			});
+			return '?' + $.param( query );
+		}
 	};
 
 	for ( var i = minPage; i <= maxPage; i++ ) {
 		vm.pagination.pages.push( i );
 	}
 
-}]);
-;angular.module( 'mam.detailView', [] )
+}])
 
-.controller( 'DetailController', [ 'title', 'mapModel', 'json',
-function(                           title,   mapModel,   json ) {
+
+// search form
+.controller( 'SearchFormController', [ 'geocoder', '$location', '$state',
+function(                               geocoder ,  $location ,  $state ) {
+
+	var form = this;
+
+	// read initial params from URL
+	form.search = $location.search();
+	// remove page number
+	delete form.search.page;
+
+	// apply filter to search results
+	form.submit = function() {
+		$state.go( 'mam.search', form.search, { reload: true, inherit: false });
+	};
+
+}]);
+;/*global $,qg*/
+angular.module( 'mam.detailView', [ 'qgovMam.config' ] )
+
+
+.config([ '$stateProvider', 'SOURCE',
+function(  $stateProvider,   SOURCE ) {
+	$stateProvider.state( 'mam.detail', {
+		url: '?title',
+		controller: 'DetailController',
+		controllerAs: 'vm',
+		templateUrl: 'detail.html',
+		resolve: {
+			title: [ '$stateParams', function( $stateParams ) {
+				return $stateParams.title;
+			}],
+			json: [ 'ckan', function( ckan ) {
+				return ckan.datastoreSearchSQL({
+					ckanServer: SOURCE.server,
+					resourceId: SOURCE.resourceId
+				});
+			}]
+		}
+	});
+}])
+
+
+.controller( 'DetailController', [ 'title', 'qgovMapModel', 'json', '$scope', '$timeout',
+function(                           title,   qgovMapModel,   json ,  $scope ,  $timeout ) {
 
 	// view model
 	var vm = this;
 
+	var latlng;
 	var item = json.result.records.filter(function( item ) {
-		return title === item.Title || title === item.Name;
+		return title === $.trim( item.Title ) || title === $.trim( item.Name );
 	});
 
 	if ( item.length > 0 ) {
 		vm.item = item[ 0 ];
-	} else {
+	// } else {
 		// error, no match
 	}
 
-	mapModel.setMarkers([{
-		title: vm.item.Title,
-		lat: parseFloat( vm.item.Latitude ),
-		lng: parseFloat( vm.item.Longitude )
-	}]);
 
+	if ( vm.item.Latitude && vm.item.Longitude ) {
+		latlng = [ parseFloat( vm.item.Latitude ), parseFloat( vm.item.Longitude ) ];
+
+		qgovMapModel.setMarkers([{
+			latlng: latlng,
+			options: { title: vm.item.Title || vm.item.Name }
+		}]);
+
+		qgovMapModel.highlight( latlng );
+
+	} else {
+		qgovMapModel.setMarkers( [] );
+		qgovMapModel.highlightState();
+	}
+
+
+	// setup image galleries
+	$scope.$on( '$viewContentLoaded', function() {
+		$timeout(function() {
+			$( 'a', '.image-gallery' ).butterfly({
+				closeButton: true,
+				closeButtonCorner: 'tr',
+				galleryContainers: '.image-gallery',
+				closeButtonImage: qg.swe.paths.assets + 'images/skin/button-close.png'
+			});
+		});
+	});
 }]);
 ;/*global $*/
-angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 'map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
+angular.module( 'qgovMam.config', [] )
 
 // search results
+.constant( 'DEFAULT_GEO_RADIUS', 1000 ) // km
 .constant( 'RESULTS_PER_PAGE', 10 )
 .constant( 'PAGES_AVAILABLE', 10 )
 
@@ -5365,12 +6775,13 @@ angular.module( 'qgovMam', [ 'ngRoute', 'qgov', 'ckanApi', 'leaflet-directive', 
 	var sourceUri = $( 'meta[name="DCTERMS.source"]' ).attr( 'content' );
 	var source = sourceUri.split( /\/+/ );
 	return {
-		dataset: source[ source.length - 1],
+		resourceId: source[ source.length - 1],
 		server: source[ 1 ],
 		uri: sourceUri
 	};
-}()))
-
+}()));
+;/*global $*/
+angular.module( 'qgovMam', [ 'ui.router', 'qgov', 'ckanApi', 'qgov.map', 'hc.marked', 'mam.searchView', 'mam.detailView' ])
 
 // markdown config
 .config([ 'markedProvider',
@@ -5384,74 +6795,54 @@ function(  markedProvider ) {
 }])
 
 
-// routing
-.config([ '$routeProvider', 'SOURCE',
-function(  $routeProvider,   SOURCE ) {
-	$routeProvider
+.config([ '$locationProvider', '$urlRouterProvider', '$stateProvider',
+function(  $locationProvider ,  $urlRouterProvider ,  $stateProvider ) {
+	// no hashbangs
+	$locationProvider.html5Mode( true );
 
-	// route error
-	.when( '/error', {
-		templateUrl: 'error.html'
-	})
-
-	// search results
-	.when( '/', {
-		// old MAM detail view URLs: ?title=<title>
-		redirectTo: function() {
-			// https://github.com/angular/angular.js/issues/7239
-			if ( /title=[^&]/.test( window.location.search )) {
-				return '/' + window.location.search.replace( /^.*[?&]title=([^&]+).*?$/, '$1' );
-			}
-		},
-		controller: 'SearchController',
-		controllerAs: 'vm',
-		templateUrl: 'search.html',
-		resolve: {
-			pageNumber: [ '$location', function( $location ) {
-				return parseInt( $location.search().page, 10 ) || 1;
-			}],
-			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest( SOURCE.dataset );
-			}]
+	// URL handling
+	$urlRouterProvider.rule(function( $injector, $location ) {
+		// ignore hash changes (default browser/SWE behaviour)
+		if ( $location.hash() ) {
+			return true;
 		}
-	})
+	});
 
-	// details view
-	.when( '/:title', {
-		// tidy up old MAM URLs
-		redirectTo: function() {
-			window.location.href = window.location.href.replace( /\?[^#]*/, '' );
-		},
-		controller: 'DetailController',
-		controllerAs: 'vm',
-		templateUrl: 'detail.html',
-		resolve: {
-			title: [ '$route', function( $route ) {
-				return $route.current.params.title;
-			}],
-			json: [ 'ckan', function( ckan ) {
-				return ckan.sqlRequest( SOURCE.dataset );
-			}]
-		}
-	})
-	.otherwise({ redirectTo : '/' });
+	// main routing
+	$stateProvider.state( 'mam', {
+		abstract: true,
+		url: '/',
+		template: '<ui-view/>'
+	});
 }])
 
 
-.run([   '$rootScope', '$location',
-function( $rootScope,   $location ) {
-	// $rootScope.$on( '$routeChangeStart', function() {
-	// 	$rootScope.isLoading = true;
-	// 	$rootScope.loadingPercent = 10;
-	// });
+// URL/route/state changes
+.run([   '$rootScope', '$state', '$location', '$anchorScroll',
+function( $rootScope ,  $state ,  $location ,  $anchorScroll ) {
+	$rootScope.$on( '$stateChangeStart', function( event, toState, toParams, fromState ) {
+		// check for greedy search start
+		if ( toState.name === 'mam.search' && $location.search().title ) {
+			// detail state, not search
+			event.preventDefault();
+			if ( fromState.name !== 'mam.detail' ) {
+				// view state please
+				$state.go( 'mam.detail', $location.search() );
+			}
+		}
+	});
 
-	$rootScope.$on( '$routeChangeSuccess', function() {
+	$rootScope.$on( '$stateChangeSuccess', function() {
 		// $rootScope.isLoading = false;
 		// $rootScope.loadingPercent = 100;
 		$( '#article' ).trigger( 'x-height-change' );
+		$anchorScroll( 0 );
 	});
 
-	$rootScope.$on( '$routeChangeError', function() {
-		$location.path( '/error' );
+	$rootScope.$on( '$stateNotFound', function() {
+		console.log( '$stateNotFound' );
+	});
+	$rootScope.$on( '$stateChangeError', function( event, toState, toParams, fromState, fromParams, error ) {
+		console.log( '$stateChangeError', error );
 	});
 }]);

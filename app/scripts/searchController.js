@@ -36,6 +36,7 @@ function(  $stateProvider ) {
 
 					ckanResponse = geocodeResponse.then(function( geoResponse ) {
 						return ckan.datastoreSearchSQL({
+							ckanServer: SOURCE.server,
 							resourceId: SOURCE.resourceId,
 							fullText: $stateParams.query,
 							latitude: geoResponse.candidates[ 0 ].location.y,
@@ -54,6 +55,7 @@ function(  $stateProvider ) {
 				}
 
 				ckanResponse = ckan.datastoreSearchSQL({
+					ckanServer: SOURCE.server,
 					resourceId: SOURCE.resourceId,
 					fullText: $stateParams.query,
 					filter: filter

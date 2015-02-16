@@ -6545,8 +6545,8 @@ function(  $stateProvider ) {
 			pageNumber: [ '$stateParams', function( $stateParams ) {
 				return parseInt( $stateParams.page, 10 ) || 1;
 			}],
-			results: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
-			function(    geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
+			results: [ 'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
+			function(   geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
 				var search = $location.search();
 				var ckanResponse, geocodeResponse;
 
@@ -6801,15 +6801,20 @@ function(  $locationProvider ,  $urlRouterProvider ,  $stateProvider ) {
 	$locationProvider.html5Mode( true );
 
 	// URL handling
+
+	// redirect /index.html to /
+	$urlRouterProvider.when( '/index.html', '/' );
+
+	// ignore hash changes (default browser/SWE behaviour)
 	$urlRouterProvider.rule(function( $injector, $location ) {
-		// ignore hash changes (default browser/SWE behaviour)
 		if ( $location.hash() ) {
 			return true;
 		}
 	});
 
 	// main routing
-	$stateProvider.state( 'mam', {
+	$stateProvider
+	.state( 'mam', {
 		abstract: true,
 		url: '/',
 		template: '<ui-view/>'

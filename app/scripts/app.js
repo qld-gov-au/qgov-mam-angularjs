@@ -19,15 +19,20 @@ function(  $locationProvider ,  $urlRouterProvider ,  $stateProvider ) {
 	$locationProvider.html5Mode( true );
 
 	// URL handling
+
+	// redirect /index.html to /
+	$urlRouterProvider.when( '/index.html', '/' );
+
+	// ignore hash changes (default browser/SWE behaviour)
 	$urlRouterProvider.rule(function( $injector, $location ) {
-		// ignore hash changes (default browser/SWE behaviour)
 		if ( $location.hash() ) {
 			return true;
 		}
 	});
 
 	// main routing
-	$stateProvider.state( 'mam', {
+	$stateProvider
+	.state( 'mam', {
 		abstract: true,
 		url: '/',
 		template: '<ui-view/>'

@@ -14,8 +14,8 @@ function(  $stateProvider ) {
 			pageNumber: [ '$stateParams', function( $stateParams ) {
 				return parseInt( $stateParams.page, 10 ) || 1;
 			}],
-			results: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
-			function(    geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
+			results: [ 'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
+			function(   geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
 				var search = $location.search();
 				var ckanResponse, geocodeResponse;
 

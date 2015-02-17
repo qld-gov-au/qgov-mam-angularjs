@@ -1,14 +1,18 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-AU" lang="en-AU">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-AU" lang="en-AU" data-ng-app="qgovMam" data-ng-controller="QgovTemplateController">
 <head prefix="og: http://ogp.me/ns#">
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-	<title>MAM demo | QGov template | Queensland Government</title>
+	<title>{{ swe.pageTitle }} | {{ swe.franchiseName }} | Queensland Government</title>
+	<base href="/demo/transport-projects/" />
 
-<!--#set var="franchise" value=""-->
-<!--#set var="title" value="MAM demo"-->
+<!--#set var="franchise" value="FRANCHISE_ID"-->
+<!--#set var="title" value="TITLE"-->
 
 <!--#include virtual="/assets/includes/global/head-assets-styles.html"-->
+<link rel="stylesheet" href="//static.qgov.net.au/assets/v2/style/qgov-map.css" />
 <!--#include virtual="/assets/includes/global/head-assets-scripts.html"-->
+<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.3.12/angular.min.js"></script>
+<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.3.12/angular-animate.min.js"></script>
 
 	<meta name="description" content="DESCRIPTION" />
 	<meta name="keywords" content="KEYWORDS" />
@@ -18,9 +22,9 @@
 
 	<meta name="DCTERMS.creator" scheme="AGLSTERMS.GOLD" content="c=AU; o=The State of Queensland; ou=DEPARTMENT NAME; ou=UNIT NAME" />
 	<meta name="DCTERMS.publisher" scheme="AGLSTERMS.AglsAgent" content="corporateName=The State of Queensland; jurisdiction=Queensland" />
-	<meta name="DCTERMS.created" content="2014-11-13" />
-	<meta name="DCTERMS.modified" content="2015-02-17" />
-	<meta name="DCTERMS.title" content="MAM demo | QGov template" />
+	<meta name="DCTERMS.created" content="YYYY-MM-DD" />
+	<meta name="DCTERMS.modified" content="YYYY-MM-DD" />
+	<meta name="DCTERMS.title" content="{{ swe.pageTitle }} | {{ swe.franchiseName }}" />
 	<meta name="DCTERMS.description" content="DESCRIPTION" />
 	<meta name="DCTERMS.subject" scheme="AGLSTERMS.APAIS" content="SUBJECT" />
 	<meta name="AGLSTERMS.function" scheme="AGLSTERMS.AGIFT" content="FUNCTION" />
@@ -30,6 +34,7 @@
 	<meta name="DCTERMS.audience" scheme="AGLSTERMS.agls-audience" content="AGLS_AUDIENCE" />
 	<meta name="DCTERMS.jurisdiction" scheme="AGLSTERMS.AglsJuri" content="Queensland" />
 	<meta name="DCTERMS.license" scheme="DCTERMS.URI" content="http://creativecommons.org/licenses/by/3.0/au/" />
+	<meta name="DCTERMS.source" scheme="DCTERMS.URI" content="https://staging.data.qld.gov.au/dataset/tmr-mam-testing/resource/300cb26e-276c-43d5-afc3-45d5fe2cb8bb" />
 </head>
 
 <body id="qld-gov-au" class="residents">
@@ -41,8 +46,8 @@
 			<h2>You are here:</h2>
 			<ol>
 <!--#include virtual="/assets/includes/global/breadcrumb-citizen.html"-->
-				<li><a href="/{{ swe.franchisePath }}/">QGov template</a></li>
-				<li class="last-child">MAM demo</li>
+				<li><a href="/{{ swe.franchisePath }}/">{{ swe.franchiseName }}</a></li>
+				<li class="last-child">{{ swe.pageTitle }}</li>
 			</ol>
 		</div>
 
@@ -52,33 +57,14 @@
 
 <!--#include virtual="/assets/includes/global/global-alert.html"-->
 
-					<h1>MAM demo</h1>
+					<h1>{{ swe.pageTitle }}</h1>
 
 <!--#include virtual="/assets/includes/global/page-options-pre.html"-->
 
-					<h2>Transport and motoring</h2>
 
-					<ul>
-						<li><a href="transport/">Transport customer service centres</a></li>
-						<li><a href="transport-projects/">Projects</a></li>
-						<li><a href="roadside/">Roadside stops</a></li>
-					</ul>
+					<div data-ng-controller="qgovMapController"><div id="map_canvas"></div></div>
+					<div data-ui-view data-autoscroll="false"></div>
 
-					<h2>Your rights, crime and the law</h2>
-					<ul>
-						<li><a href="prison/">Prison locations</a></li>
-						<li><a href="victims/">Find a support service</a> (Support for victims of crime)</li>
-					</ul>
-
-					<h2>People with disabilities</h2>
-					<ul>
-						<li><a href="playgrounds/">All Abilities Playgrounds</a></li>
-					</ul>
-
-					<h2>DSITIA</h2>
-					<ul>
-						<li><a href="science/">Science Capability Directory</a></li>
-					</ul>
 
 				</div></div></div><!-- end .article, .box-sizing, .border -->
 			</div><!-- end #content -->
@@ -99,7 +85,7 @@
 						</dd>
 
 						<dt>Last updated</dt>
-						<dd>17 February 2015</dd>
+						<dd>D MONTH_NAME YYYY</dd>
 					</dl>
 				</div></div>
 
@@ -122,6 +108,7 @@
 
 
 <!--#include virtual="/assets/includes/global/footer-page.html"-->
+<script src="/assets/mam.js"></script>
 <!--#include virtual="/assets/includes/global/footer-stats.html"-->
 
 </body>

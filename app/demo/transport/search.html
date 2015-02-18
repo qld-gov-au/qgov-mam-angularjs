@@ -58,8 +58,11 @@
 	</form>
 </div>
 
+<!-- Displayed if no results are returned -->
+<div id="app-viewport-tools-results" ng-if="vm.description.total == '0'"> <div class="status warn">No results returned—please search again using search terms or options.</div></div>
 
-<div id="app-viewport-tools-results">
+<!-- Displayed if results are returned -->
+<div id="app-viewport-tools-results" ng-if="vm.description.total != '0'">
 	<h2 class="resultset-title">
 		Displaying results
 		<strong>{{ vm.description.start }}–{{ vm.description.end }}</strong>

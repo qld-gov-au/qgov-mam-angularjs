@@ -6648,7 +6648,8 @@ function(                           RESULTS_PER_PAGE ,  PAGES_AVAILABLE ,  qgovM
 		start: firstResultOnPage,
 		end: Math.min( firstResultOnPage + RESULTS_PER_PAGE - 1, total ),
 		total: total,
-		keywords: ''
+		query: $stateParams.query,
+		location: $stateParams.location
 	};
 
 	var lastPage = Math.ceil( total / RESULTS_PER_PAGE );

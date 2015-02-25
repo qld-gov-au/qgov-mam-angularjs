@@ -60,44 +60,63 @@
 
 
 <div id="app-viewport-tools-results">
-	<h2 class="resultset-title">
-		Displaying results
-		<strong>{{ vm.description.start }}–{{ vm.description.end }}</strong>
-		of <strong>{{ vm.description.total }}</strong>
-		<span ng-if="vm.description.keywords">for <strong>{{ vm.description.keywords }}</strong></span>
-	</h2>
+	<!-- Displayed if no results are returned -->
+	<div ng-if="vm.description.total === 0">
+		<p>Your search did not return any results. Please try the search suggestions listed below.</p>
 
-	<div class="status info">
-		<p><strong>Note</strong>: Select a service centre to find its location, opening hours and the services it offers.</p>
-	</div>
-	<ol class="search-results">
-		<li ng-repeat="result in vm.searchResults | limitTo: vm.pagination.limit">
-			<h3>
-				<a ui-sref="mam.detail({ title: result.Title })" ui-sref-opts="{ inherit: false }">{{ result.Title }}</a>
-			</h3>
-
-			<div class="status warn" ng-if="result.MainAlert">
-				<h2>Please note</h2>
-				{{ result.MainAlert }}
-			</div>
-
-			<div class="services" marked="result.Services"></div>
-			<p class="meta">
-				<strong>Phone:</strong>&nbsp;{{ result.Phone }}
-			</p>
-			<hr/>
-		</li>
-	</ol>
-
-	<!-- pagination -->
-	<div id="pagination">
+		<h2>Tips for searching</h2>
 		<ul>
-			<li ng-if="vm.pagination.previous" class="previous"><a ng-href="{{ vm.pagination.pageUrl( vm.pagination.previous ) }}">Previous</a></li>
-			<li ng-repeat="page in vm.pagination.pages" ng-switch="page === vm.pagination.current">
-				<span ng-switch-when="true">{{ page }}</span>
-				<a ng-switch-default ng-href="{{ vm.pagination.pageUrl( page ) }}">{{ page }}</a>
-			</li>
-			<li ng-if="vm.pagination.next" class="next"><a  ng-href="{{ vm.pagination.pageUrl( vm.pagination.next ) }}">Next</a></li>
+			<li>Show <a href="./">all locations</a></li>
+			<li>Use the map to find centers in locations near you</li>
+			<li>Search by postcode</li>
+			<li>Use the name of the nearest major town</li>
+			<li>Check the spelling.</li>
 		</ul>
 	</div>
+
+
+	<!-- Displayed if results are returned -->
+	<div ng-if="vm.description.total > 0">
+		<h2 class="resultset-title">
+			Displaying results
+			<strong>{{ vm.description.start }}–{{ vm.description.end }}</strong>
+			of <strong>{{ vm.description.total }}</strong>
+			<span ng-if="vm.description.query">for <strong>{{ vm.description.query }}</strong></span>
+			<span ng-if="vm.description.location">near <strong>{{ vm.description.location }}</strong></span>
+		</h2>
+
+		<div class="status info">
+			<p><strong>Note</strong>: Select a service centre to find its location, opening hours and the services it offers.</p>
+		</div>
+		<ol class="search-results">
+			<li ng-repeat="result in vm.searchResults | limitTo: vm.pagination.limit">
+				<h3>
+					<a ui-sref="mam.detail({ title: result.Title })" ui-sref-opts="{ inherit: false }">{{ result.Title }}</a>
+				</h3>
+
+				<div class="status warn" ng-if="result.MainAlert">
+					<h2>Please note</h2>
+					{{ result.MainAlert }}
+				</div>
+
+				<div class="services" marked="result.Services"></div>
+				<p class="meta">
+					<strong>Phone:</strong>&nbsp;{{ result.Phone }}
+				</p>
+				<hr/>
+			</li>
+		</ol>
+
+		<!-- pagination -->
+		<div id="pagination">
+			<ul>
+				<li ng-if="vm.pagination.previous" class="previous"><a ng-href="{{ vm.pagination.pageUrl( vm.pagination.previous ) }}">Previous</a></li>
+				<li ng-repeat="page in vm.pagination.pages" ng-switch="page === vm.pagination.current">
+					<span ng-switch-when="true">{{ page }}</span>
+					<a ng-switch-default ng-href="{{ vm.pagination.pageUrl( page ) }}">{{ page }}</a>
+				</li>
+				<li ng-if="vm.pagination.next" class="next"><a  ng-href="{{ vm.pagination.pageUrl( vm.pagination.next ) }}">Next</a></li>
+			</ul>
+		</div>
+	</div> <!-- nf-if -->
 </div>

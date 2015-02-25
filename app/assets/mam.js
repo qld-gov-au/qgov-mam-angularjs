@@ -4240,6 +4240,17 @@ angular.module('ui.router.state')
 	swe.franchisePath = 'transport';
 
 	$scope.swe = swe;
+})
+
+.directive( 'qgovList', function() {
+	return {
+		restrict: 'A',
+		scope: { value: '=' },
+		template: '<ul ng-if="list.length"><li ng-repeat="item in list">{{ item }}</li></ul><span ng-if="!list.length">{{ value }}</span>',
+		link: function( scope ) {
+			scope.list = scope.value.split( /;\s*/ );
+		}
+	};
 });
 ;/*global $, fullScreenApi */
 angular.module( 'qgov.map', [] )

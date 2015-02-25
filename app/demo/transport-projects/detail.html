@@ -1,0 +1,158 @@
+<div id="view">
+	<div id="app-viewport-info">
+		<a name="top"></a>
+
+		<h2>{{ vm.item.Title }}</h2>
+
+			<div id="overview" ng-if="vm.item.Overview">
+				<p><strong>Overview:</strong> <br />
+			{{ vm.item.Overview }}</p></div>
+
+			<div id="location" ng-if="vm.item.Location">
+			<p><strong>Location:</strong> <br />
+			{{ vm.item.Location }}</p></div>
+
+			<div id="benefits" ng-if="vm.item.Benefits">
+				<p><strong>Benefits:</strong> <br />
+			{{ vm.item.Benefits }}</p></div>
+
+			<div id="funding" ng-if="vm.item.Funding">
+				<p><strong>Funding:</strong> <br />
+			{{ vm.item.Funding }}</p></div>
+
+			<div id="supplier" ng-if="vm.item.Supplier">
+				<p><strong>Supplier:</strong> <br />
+			{{ vm.item.Supplier }}</p></div>
+
+			<div id="suburb" ng-if="vm.item.Suburb">
+				<p><strong>Suburb(s):</strong> <br />
+			{{ vm.item.Suburb }}</p></div>
+
+			<div id="stage" ng-if="vm.item.Stage">
+				<p><strong>Project stage:</strong> <br />
+			{{ vm.item.Stage }}</p></div>
+
+			 <div id="completion" ng-if="vm.item.Completion">
+				<p><strong>Completion:</strong> <br />
+			{{ vm.item.Completion }}</p></div>
+
+			<div ng-include="vm.item.Include"></div>
+	</div>
+</div>
+
+<div id="postcode" ng-if="vm.item.Postcode">
+	<p><strong>Postcode:</strong> <br />
+	<span data-qgov-list data-value="vm.item.Postcode"></span>
+</div>
+
+
+
+  <!--      <dl class="grid">
+			<div id="overview" ng-if="vm.item.Overview">
+				<dt>Overview:</dt>
+			<dd>{{ vm.item.Overview }}</dd></div>
+
+			<div id="location" ng-if="vm.item.Location"><dt>Location:</dt>
+			<dd>{{ vm.item.Location }}</dd></div>
+
+			<div id="benefits" ng-if="vm.item.Benefits">
+				<dt>Benefits:</dt>
+			<dd>{{ vm.item.Benefits }}</dd></div>
+
+
+			<div id="funding" ng-if="vm.item.Funding">
+				<dt>Funding:</dt>
+			<dd>{{ vm.item.Funding }}</dd></div>
+
+			<div id="supplier" ng-if="vm.item.Supplier">
+				<dt>Supplier:</dt>
+			<dd>{{ vm.item.Supplier }}</dd></div>
+
+			<div id="suburb" ng-if="vm.item.Suburb">
+				<dt>Suburb:</dt>
+			<dd>{{ vm.item.Suburb }}</dd></div>
+
+			<div id="stage" ng-if="vm.item.Stage">
+				<dt>Project stage:</dt>
+			<dd>{{ vm.item.Stage }}</dd></div>
+
+			 <div id="completion" ng-if="vm.item.Completion">
+				<dt>Completion:</dt>
+			<dd>{{ vm.item.Completion }}</dd></div>
+
+			</dl> -->
+
+
+
+	<!--	<dl class="grid">
+			<dt>Address:</dt>
+			<dd>
+				<div class="caption location adr">
+					<span ng-if="vm.item[ 'Address 1' ]"><span class="extended-address">{{ vm.item[ 'Address 1' ] }}</span><br /></span>
+					<span class="street-address">{{ vm.item[ 'Address 2' ] }}</span><br />
+					<span class="locality">{{ vm.item.Suburb }}</span>&nbsp;
+					<span class="region">QLD</span>&nbsp;
+					<span class="postal-code">{{ vm.item.Postcode }}</span>
+				</div>
+			</dd>
+			<dt>Postal address:</dt>
+			<dd>
+				<div class="caption location adr">
+					<span ng-if="vm.item[ 'Postal address 1' ]"><span class="extended-address">{{ vm.item[ 'Postal address 1' ] }}</span><br /></span>
+					<span class="street-address">{{ vm.item[ 'Postal address 2' ] }}</span><br />
+					<span class="locality">{{ vm.item[ 'Postal suburb' ] }}</span>&nbsp;
+					<span class="region">QLD</span>&nbsp;
+					<span class="postal-code">{{ vm.item[ 'Postal postcode' ] }}</span>
+				</div>
+			</dd>
+			<dt>Phone:</dt>
+			<dd>{{ vm.item.Phone }}</dd>
+			<dt>Fax:</dt>
+			<dd>{{ vm.item.Fax }}</dd>
+		</dl> -->
+
+<!--
+		<p marked="vm.item.NonTMR"></p>
+
+		<table>
+			<caption>
+				Opening hours for transport services
+			</caption>
+			<thead>
+				<tr colspan="3">
+					<th>Day</th>
+					<th>Morning</th>
+					<th>Afternoon</th>
+				</tr>
+			</thead>
+			<tbody class="weekdays">
+				<tr class="even">
+					<th>Monday</th>
+					<td>{{ vm.item[ 'Mon am' ] }}</td>
+					<td>{{ vm.item[ 'Mon pm' ] }}</td>
+				</tr>
+				<tr>
+					<th>Tuesday</th>
+					<td>{{ vm.item[ 'Tues am' ] }}</td>
+					<td>{{ vm.item[ 'Tues pm' ] }}</td>
+				</tr>
+				<tr class="even">
+					<th>Wednesday</th>
+					<td>{{ vm.item[ 'Wed am' ] }}</td>
+					<td>{{ vm.item[ 'Wed pm' ] }}</td>
+				</tr>
+				<tr>
+					<th>Thursday</th>
+					<td>{{ vm.item[ 'Thurs am' ] }}</td>
+					<td>{{ vm.item[ 'Thurs pm' ] }}</td>
+				</tr>
+				<tr class="even">
+					<th>Friday</th>
+					<td>{{ vm.item[ 'Fri am' ] }}</td>
+					<td>{{ vm.item[ 'Fri pm' ] }}</td>
+				</tr>
+			</tbody>
+		</table>
+		-->
+
+

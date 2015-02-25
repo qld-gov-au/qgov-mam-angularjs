@@ -6696,7 +6696,8 @@ function(                               geocoder ,  $location ,  $state ) {
 
 	// apply filter to search results
 	form.submit = function() {
-		$state.go( 'mam.search', form.search, { reload: true, inherit: false });
+		$location.search( form.search );
+		$state.go( 'mam.search', form.search, { location: false, reload: true, inherit: false });
 	};
 
 }]);

@@ -87,7 +87,8 @@
 		Displaying results
 		<strong>{{ vm.description.start }}–{{ vm.description.end }}</strong>
 		of <strong>{{ vm.description.total }}</strong>
-		<span ng-if="vm.description.keywords">for <strong>{{ vm.description.keywords }}</strong></span>
+		<span ng-if="vm.description.query">for <strong>{{ vm.description.query }}</strong></span>
+		<span ng-if="vm.description.location">near <strong>{{ vm.description.location }}</strong></span>
 	</h2>
 
 	<ol class="search-results">

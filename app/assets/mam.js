@@ -4240,6 +4240,17 @@ angular.module('ui.router.state')
 	swe.franchisePath = 'transport';
 
 	$scope.swe = swe;
+})
+
+.directive( 'qgovList', function() {
+	return {
+		restrict: 'A',
+		scope: { value: '=' },
+		template: '<ul ng-if="list.length"><li ng-repeat="item in list">{{ item }}</li></ul><span ng-if="!list.length">{{ value }}</span>',
+		link: function( scope ) {
+			scope.list = scope.value.split( /;\s*/ );
+		}
+	};
 });
 ;/*global $, fullScreenApi */
 angular.module( 'qgov.map', [] )
@@ -4312,7 +4323,7 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $state
 	$window.L.Icon.Default.imagePath = $window.qg.swe.paths.assets + 'images/skin/map-marker';
 
 	// setup the DIV container
-	$( '#map_canvas' ).height( 270 );
+	$( '#map_canvas' ).height( $( '#map_canvas' ).is( '.square' ) ? 540 : 270 );
 
 	// init leaflet
 	var map = $window.L.map( 'map_canvas', {
@@ -6545,8 +6556,8 @@ function(  $stateProvider ) {
 			pageNumber: [ '$stateParams', function( $stateParams ) {
 				return parseInt( $stateParams.page, 10 ) || 1;
 			}],
-			results: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
-			function(    geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
+			results: [ 'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
+			function(   geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
 				var search = $location.search();
 				var ckanResponse, geocodeResponse;
 
@@ -6637,7 +6648,8 @@ function(                           RESULTS_PER_PAGE ,  PAGES_AVAILABLE ,  qgovM
 		start: firstResultOnPage,
 		end: Math.min( firstResultOnPage + RESULTS_PER_PAGE - 1, total ),
 		total: total,
-		keywords: ''
+		query: $stateParams.query,
+		location: $stateParams.location
 	};
 
 	var lastPage = Math.ceil( total / RESULTS_PER_PAGE );
@@ -6685,7 +6697,8 @@ function(                               geocoder ,  $location ,  $state ) {
 
 	// apply filter to search results
 	form.submit = function() {
-		$state.go( 'mam.search', form.search, { reload: true, inherit: false });
+		$location.search( form.search );
+		$state.go( 'mam.search', form.search, { location: false, reload: true, inherit: false });
 	};
 
 }]);
@@ -6801,15 +6814,20 @@ function(  $locationProvider ,  $urlRouterProvider ,  $stateProvider ) {
 	$locationProvider.html5Mode( true );
 
 	// URL handling
+
+	// redirect /index.html to /
+	$urlRouterProvider.when( '/index.html', '/' );
+
+	// ignore hash changes (default browser/SWE behaviour)
 	$urlRouterProvider.rule(function( $injector, $location ) {
-		// ignore hash changes (default browser/SWE behaviour)
 		if ( $location.hash() ) {
 			return true;
 		}
 	});
 
 	// main routing
-	$stateProvider.state( 'mam', {
+	$stateProvider
+	.state( 'mam', {
 		abstract: true,
 		url: '/',
 		template: '<ui-view/>'

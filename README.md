@@ -6,16 +6,19 @@ This repo is provided as a sample for pulling data from the [Queensland Governme
 
 ## Installation
 
-1. `npm install -g grunt-cli`
-2. `npm install`
-3. `grunt install`
+1. install [node.js](http://nodejs.org/)
+2. install grunt: `npm install -g grunt-cli`
+3. install dependencies: `npm install`
 
 ## Development
 
-1. `grunt dev`
+1. `grunt`
 2. Go to: `http://localhost:8888`
 
 ## Testing
+
+1. run the installation steps above
+2. update webdriver (for tests) `grunt install`
 
 ### Run all tests with
 `grunt test` 

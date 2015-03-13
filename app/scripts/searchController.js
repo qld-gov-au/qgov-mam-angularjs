@@ -14,8 +14,8 @@ function(  $stateProvider ) {
 			pageNumber: [ '$stateParams', function( $stateParams ) {
 				return parseInt( $stateParams.page, 10 ) || 1;
 			}],
-			results: [  'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
-			function(    geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
+			results: [ 'geocoder', 'ckan', 'SOURCE', 'DEFAULT_GEO_RADIUS', '$q', '$stateParams', '$location',
+			function(   geocoder ,  ckan ,  SOURCE ,  DEFAULT_GEO_RADIUS ,  $q ,  $stateParams ,  $location ) {
 				var search = $location.search();
 				var ckanResponse, geocodeResponse;
 
@@ -106,7 +106,8 @@ function(                           RESULTS_PER_PAGE ,  PAGES_AVAILABLE ,  qgovM
 		start: firstResultOnPage,
 		end: Math.min( firstResultOnPage + RESULTS_PER_PAGE - 1, total ),
 		total: total,
-		keywords: ''
+		query: $stateParams.query,
+		location: $stateParams.location
 	};
 
 	var lastPage = Math.ceil( total / RESULTS_PER_PAGE );
@@ -154,7 +155,8 @@ function(                               geocoder ,  $location ,  $state ) {
 
 	// apply filter to search results
 	form.submit = function() {
-		$state.go( 'mam.search', form.search, { reload: true, inherit: false });
+		$location.search( form.search );
+		$state.go( 'mam.search', form.search, { location: false, reload: true, inherit: false });
 	};
 
 }]);

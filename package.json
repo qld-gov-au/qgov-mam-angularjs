@@ -26,7 +26,6 @@
     "grunt-open": "^0.2.3",
     "grunt-protractor-runner": "^1.1.4",
     "grunt-shell": "^1.1.1",
-    "grunt-shell-spawn": "^0.3.0",
     "grunt-text-replace": "^0.4.0",
     "karma": "^0.12.24",
     "karma-chrome-launcher": "^0.1.5",

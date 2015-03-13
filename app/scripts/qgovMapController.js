@@ -105,6 +105,7 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $state
 
 	// cluster layer
 	var cluster = new $window.L.MarkerClusterGroup({
+		maxClusterRadius: 40,
 		iconCreateFunction: function( cluster ) {
 			return $window.L.divIcon({
 				iconAnchor: [ 10, 25 ],

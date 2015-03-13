@@ -69,7 +69,7 @@ function(                            qgovMapModel ,  $window ,  $scope ,  $state
 	$window.L.Icon.Default.imagePath = $window.qg.swe.paths.assets + 'images/skin/map-marker';
 
 	// setup the DIV container
-	$( '#map_canvas' ).height( 270 );
+	$( '#map_canvas' ).height( $( '#map_canvas' ).is( '.square' ) ? 540 : 270 );
 
 	// init leaflet
 	var map = $window.L.map( 'map_canvas', {
